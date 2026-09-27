@@ -2,12 +2,20 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { createMusicService, GENRES } from './music.mjs';
+import { isDifficulty } from '../dist/difficulties.js';
+import { createLobbyService } from './lobbies.mjs';
+import { createLobbyRouter, trustedProxyIPs } from './lobby-api.mjs';
 const root = resolve('dist');
 const music = createMusicService({ dataDir: resolve(process.env.NEEDLE_DROP_DATA_DIR || '.data/daily') });
+const lobbies = createLobbyService({ music });
+const lobbyRoute = createLobbyRouter(lobbies, { trustedProxies: trustedProxyIPs(process.env.TRUSTED_PROXY_IPS) });
+const lobbyTimer = setInterval(() => lobbies.tick(), 250);
+lobbyTimer.unref();
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json' };
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (await lobbyRoute(req, res, url)) return;
     if (url.pathname === '/healthz') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end('{"status":"ok"}'); return; }
     if (url.pathname.startsWith('/api/')) {
       const json = (code, body) => res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(body));
@@ -16,15 +24,17 @@ const server = createServer(async (req, res) => {
         if (url.pathname === '/api/daily') { json(200, await music.dailySong()); return; }
         if (url.pathname === '/api/random') {
           const genre = url.searchParams.get('genre') || 'All';
-          if (genre !== 'All' && !GENRES[genre]) { json(400, { error: 'Choose a supported genre.' }); return; }
+          if (genre !== 'All' && !Object.hasOwn(GENRES, genre)) { json(400, { error: 'Choose a supported genre.' }); return; }
+          const difficulty = url.searchParams.get('difficulty') || 'easy';
+          if (!isDifficulty(difficulty)) { json(400, { error: 'Choose a supported difficulty.' }); return; }
           const exclude = (url.searchParams.get('exclude') || '').split(',').slice(-500).map(Number).filter(Number.isSafeInteger);
-          json(200, { song: await music.randomSong(genre, exclude) }); return;
+          json(200, { song: await music.randomSong(genre, exclude, difficulty), difficulty }); return;
         }
         if (url.pathname === '/api/search') { json(200, { songs: await music.search(url.searchParams.get('q') || '') }); return; }
         const match = url.pathname.match(/^\/api\/track\/(\d+)$/);
         if (match) { json(200, await music.preview(Number(match[1]))); return; }
         json(404, { error: 'Not found.' });
-      } catch (error) { console.error('Music request failed:', error.message); json(503, { error: 'Music could not be loaded. Please retry in a moment.' }); }
+      } catch (error) { console.error('Music request failed:', error.message); json(503, { error: error.code === 'EMPTY_POOL' ? error.message : 'Music could not be loaded. Please retry in a moment.' }); }
       return;
     }
     const path = resolve(root, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111411"><title>Party Lobby — Needle Drop</title>
+  <meta name="description" content="Invite friends, guess the same songs, and race for the highest score.">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="multiplayer.css">
+  <script type="module" src="multiplayer.js"></script>
+</head>
+<body>
+  <header class="site-header"><a class="brand" href="./"><span class="brand-icon" aria-hidden="true">▂▆█▅</span> needle<span>drop</span></a><a class="solo-link" href="./">Solo play ↗</a></header>
+  <main class="party-main">
+    <div class="party-heading"><div><span class="eyebrow">PLAY TOGETHER</span><h1>Party <em>lobby.</em></h1><p>Same song. Sixty seconds. Who knows it first?</p></div><span id="connection" class="connection" role="status"></span></div>
+    <p id="party-status" class="status" role="status" aria-live="polite"></p>
+    <section id="entry" class="entry-card">
+      <label for="player-name">Your name</label><input id="player-name" maxlength="24" autocomplete="nickname" placeholder="What should we call you?">
+      <div class="entry-options"><div><h2>Bring your people.</h2><p>Create a lobby, choose your tracks, and share the code.</p><button id="create-lobby" class="guess-button">Create lobby ↗</button></div>
+      <form id="join-form"><h2>Got a code?</h2><label for="join-code">Six-character join code</label><input id="join-code" maxlength="6" minlength="6" pattern="[A-Za-z0-9]{6}" autocomplete="off" autocapitalize="characters" placeholder="ABC234" required><button class="guess-button" id="join-lobby">Join lobby ↗</button></form></div>
+      <p class="party-muted">2–16 players · No accounts · Faster answers earn more points</p>
+    </section>
+    <section id="lobby" hidden>
+      <div class="lobby-banner"><div><span class="section-label">JOIN CODE</span><strong id="room-code"></strong></div><div class="banner-actions"><button class="skip-button" id="copy-code">Copy code</button><button class="skip-button" id="copy-link">Copy invite link</button><button class="skip-button" id="leave-lobby">Leave lobby</button></div></div>
+      <div class="party-layout">
+        <div>
+          <section id="waiting-room" class="party-card">
+            <h2>Set the rotation.</h2><p id="host-note" class="party-muted"></p>
+            <form id="settings-form"><fieldset id="host-settings"><legend class="sr-only">Host settings</legend><div class="settings-grid">
+              <label>Tracks<input id="setting-tracks" type="number" min="1" max="20" value="5" required></label>
+              <label>Level<select id="setting-difficulty"><option value="easy">Easy — Top 100</option><option value="medium">Medium</option><option value="hard">Hard</option><option value="expert">Expert</option><option value="impossible">Impossible</option></select></label>
+              <label>Genre<select id="setting-genre"><option value="All">All genres</option><option>Pop</option><option>Rock</option><option>Hip-Hop</option><option>Electronic</option><option>R&amp;B</option><option>Country</option></select></label>
+              <label>Guesses per track<select id="setting-guesses"><option value="3">3 guesses</option><option value="6" selected>6 guesses</option><option value="10">10 guesses</option></select></label>
+              <label>Player limit<input id="setting-players" type="number" min="2" max="16" value="12" required></label>
+              <label>Listening mode<select id="setting-clip"><option value="progressive">Expanding clips</option><option value="full">Full preview</option></select></label>
+            </div><label class="checkbox-label"><input id="setting-early" type="checkbox" checked> End the round when everyone has finished</label><button class="skip-button" id="save-settings" type="submit">Save settings</button><span id="settings-dirty" class="party-muted" hidden>Unsaved changes</span></fieldset></form>
+            <p id="settings-summary" class="party-muted"></p><div class="lobby-controls"><button id="ready-button" class="guess-button">Ready up</button><button id="start-game" class="guess-button" hidden>Start game ↗</button></div>
+            <p class="party-muted">Every track lasts up to 60 seconds. Faster guesses earn up to 1,000 points. In expanding-clip mode, each skip unlocks more audio for you and reduces your time-based points by 20%. Settings changes reset everyone’s ready status.</p>
+          </section>
+          <section id="round-panel" class="party-card" hidden>
+            <div class="round-top"><span id="round-label" class="daily-label"></span><strong id="round-timer" class="round-timer" role="timer"></strong></div>
+            <h2 id="round-title"></h2><p id="round-note" class="party-muted"></p>
+            <div class="round-progress"><div id="round-progress-fill"></div></div>
+            <div class="party-player"><button id="party-play" class="play-button" aria-label="Play song clip" disabled>▶</button><div><strong id="audio-label">Get your ears ready.</strong><span id="audio-note" class="party-muted"></span></div><label class="volume-label"><span class="sr-only">Volume</span><input id="party-volume" type="range" min="0" max="1" step="0.05" value="0.8" aria-label="Volume"></label></div>
+            <div class="clip-actions"><button id="hear-more" class="skip-button" type="button" disabled>Hear more → 2s (−20% points)</button><span id="potential-points" class="party-muted" hidden></span></div>
+            <p id="audio-error" class="status error" role="status"></p>
+            <form id="party-guess-form" autocomplete="off"><label for="party-search">Name that song</label><div class="search-wrapper"><input id="party-search" type="text" placeholder="Search song or artist…" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="party-suggestions"><ul id="party-suggestions" role="listbox" hidden></ul></div><div class="guess-actions"><span id="guesses-left"></span><button id="party-guess" class="guess-button" disabled>Guess ↗</button></div></form>
+            <ol id="party-attempts" class="attempts"></ol>
+            <div id="answer-reveal" class="result" hidden><div class="result-top"><img id="answer-cover" alt="Album artwork"><div><h3 id="answer-title"></h3><p id="answer-artist"></p><a id="answer-link" target="_blank" rel="noreferrer">Listen on Deezer ↗</a></div></div></div>
+            <div class="lobby-controls"><button id="next-round" class="guess-button" hidden>Next track ↗</button><button id="retry-round" class="guess-button" hidden>Retry track</button><button id="rematch" class="guess-button" hidden>Back to lobby / rematch ↗</button></div>
+          </section>
+        </div>
+        <aside class="party-card scoreboard"><div class="scoreboard-heading"><h2 id="scores-title">The crew</h2><span id="player-count"></span></div><ol id="players" class="player-list"></ol><p class="party-muted">Scores are shared live. Rejoin this tab after a refresh to keep your seat. If the host disconnects, another player takes over after 45 seconds.</p></aside>
+      </div>
+    </section>
+  </main>
+  <footer><span>For the love of the first few seconds.</span><span>Music previews by <a href="https://www.deezer.com" target="_blank" rel="noreferrer">Deezer ↗</a></span></footer>
+</body>
+</html>

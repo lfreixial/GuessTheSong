@@ -2,7 +2,9 @@ services:
   game:
     build: .
     ports:
-      - "127.0.0.1:${GAME_PORT:-8080}:4173"
+      - "${GAME_BIND:-127.0.0.1}:${GAME_PORT:-8080}:4173"
+    environment:
+      TRUSTED_PROXY_IPS: "${TRUSTED_PROXY_IPS:-}"
     volumes:
       - daily-songs:/data
     restart: unless-stopped

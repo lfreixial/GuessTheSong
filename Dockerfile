@@ -10,7 +10,7 @@ COPY site/package.json ./package.json
 COPY site/dist ./dist
 COPY site/scripts/*.mjs ./scripts/
 
-RUN node --test scripts/game.test.mjs scripts/music.test.mjs \
+RUN npm test \
     && mkdir -p /data/daily \
     && chown -R node:node /data
 

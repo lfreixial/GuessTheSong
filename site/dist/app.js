@@ -1,10 +1,14 @@
 import { CLIPS, utcDay, normalize, sameSong, newRound, hasWon, isFinished, clipLength, makeGuess, restoreRound } from './game.js';
+import { DIFFICULTIES, isDifficulty } from './difficulties.js';
 const $ = id => document.getElementById(id);
 let catalog = [], mode = 'daily', round, daily, endless, chosen = null, matches = [], activeOption = -1, seen = [], clockOffset = 0, loadVersion = 0, ready = false;
 const audio = new Audio();
 audio.preload = 'auto'; audio.volume = .8;
 let frame, clipTimer, playRequest = 0, endlessGenre = 'All';
 let searchTimer, searchVersion = 0, roundRequest = 0, dailyLoading = false, dailyRetryAt = 0, retryAction;
+const savedDifficulty = storageRead('needle-drop:difficulty');
+let endlessDifficulty = isDifficulty(savedDifficulty) ? savedDifficulty : 'easy', roundLoading = false;
+$('difficulty').value = endlessDifficulty;
 async function api(path) {
   const response = await fetch(`/api/${path}`, { cache: 'no-store', signal: AbortSignal.timeout(90000) });
   const serverTime = Date.parse(response.headers.get('date'));
@@ -14,7 +18,7 @@ async function api(path) {
   return result;
 }
 function remember(songs) { for (const song of songs) { if (song && Number.isSafeInteger(song.id) && typeof song.title === 'string' && typeof song.artist === 'string' && !catalog.some(t => t.id === song.id)) catalog.push(song); } }
-function musicError(action) { retryAction = action; $('retry-music').hidden = false; status('Music could not be loaded. Please retry in a moment.', true); }
+function musicError(action, message = 'Music could not be loaded. Please retry in a moment.') { retryAction = action; $('retry-music').hidden = false; status(message, true); }
 $('retry-music').onclick = () => retryAction?.();
 const bars = [];
 for (let i = 0; i < 86; i++) {
@@ -28,7 +32,7 @@ function storageRead(key) { try { return JSON.parse(localStorage.getItem(key)); 
 function save() { if (mode === 'daily') { try { localStorage.setItem(`needle-drop:v2:${daily.date}`, JSON.stringify({ ...daily, songs: catalog.filter(t => t.id === daily.trackId || daily.attempts.some(a => a.id === t.id)) })); } catch { status('Progress cannot be saved in this browser. Keep this tab open.'); } } }
 function track() { return catalog.find(t => t.id === round.trackId); }
 function updateClock() {
-  if (!round) return;
+  if (!round || roundLoading) return;
   const time = now();
   if (daily && daily.date !== utcDay(time) && !dailyLoading && Date.now() > dailyRetryAt) refreshDaily();
   const remaining = 86400 - ((time.getUTCHours() * 3600) + time.getUTCMinutes() * 60 + time.getUTCSeconds());
@@ -79,7 +83,7 @@ async function loadPreview() {
   }
 }
 $('play').addEventListener('click', async () => {
-  if (!round) return;
+  if (!round || roundLoading) return;
   if (!audio.paused) { stopAudio(); return; }
   if (!ready) { await loadPreview(); if (!ready) return; }
   const request = ++playRequest;
@@ -133,6 +137,7 @@ $('song-search').addEventListener('keydown', e => {
 });
 document.addEventListener('click', e => { if (!e.target.closest('.search-wrapper')) closeSuggestions(); });
 function submit(id) {
+  if (roundLoading) return;
   const activeRound = round;
   updateClock();
   if (mode === 'daily' && (!daily || daily.date !== utcDay(now()))) { status('A new daily drop is loading. Please wait before guessing.'); return; }
@@ -153,10 +158,13 @@ function render() {
   $('daily-mode').classList.toggle('active', mode === 'daily'); $('endless-mode').classList.toggle('active', mode === 'endless');
   $('daily-mode').setAttribute('aria-pressed', String(mode === 'daily')); $('endless-mode').setAttribute('aria-pressed', String(mode === 'endless'));
   $('genre').disabled = mode === 'daily';
+  $('difficulty').disabled = mode === 'daily';
+  $('difficulty-note').textContent = mode === 'daily' ? 'Endless mode' : '5 levels';
+  $('difficulty-description').textContent = mode === 'daily' ? 'Choose Endless rotation to pick a level, from Top 100 hits to obscure deep cuts.' : DIFFICULTIES[endlessDifficulty].description;
   $('genre-note').textContent = mode === 'daily' ? 'Endless mode' : 'Live catalogue';
   $('genre-description').textContent = mode === 'daily' ? 'Today’s track is the same for everyone. Come back for a fresh drop tomorrow.' : 'Pick a genre and discover your next mystery track. Change it anytime for a new round.';
   $('session-label').textContent = mode === 'daily' ? 'DAILY DROP' : 'ENDLESS ROTATION';
-  $('date-label').textContent = mode === 'daily' ? new Date(`${round.date}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : $('genre').value;
+  $('date-label').textContent = mode === 'daily' ? new Date(`${round.date}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : `${$('genre').value} · ${DIFFICULTIES[endlessDifficulty].label}`;
   $('track-label').textContent = finished ? 'THE TRACK REVEALED' : 'THE MYSTERY TRACK';
   $('player-title').textContent = finished ? (hasWon(round) ? 'You know your music.' : 'One for your playlist.') : 'A little sound. A big clue.';
   $('player-subtitle').textContent = finished ? (hasWon(round) ? `Found in ${count} ${count === 1 ? 'guess' : 'guesses'}. Keep that good feeling.` : 'There’s always another song to fall in love with.') : 'Press play and see what rings a bell.';
@@ -188,23 +196,50 @@ function render() {
     const next = document.createElement('button'); next.className = 'guess-button'; next.textContent = mode === 'daily' ? 'Keep playing in endless ↗' : 'Next track ↗'; next.onclick = () => mode === 'daily' ? setMode('endless') : nextEndless(); actions.append(next);
     $('result').append(top, actions);
   }
-  $('bottom-caption').textContent = mode === 'daily' ? 'A new track, every day. Resets at 00:00 UTC.' : 'Fresh picks from live genre stations. Recent tracks excluded.';
+  $('bottom-caption').textContent = mode === 'daily' ? 'A new track, every day. Resets at 00:00 UTC.' : `${DIFFICULTIES[endlessDifficulty].label} · ${DIFFICULTIES[endlessDifficulty].summary}. Recent tracks excluded.`;
   document.querySelector('.game-panel').setAttribute('aria-busy', 'false'); renderProgress(); updateClock();
 }
 function loadRound() { stopAudio(); audio.removeAttribute('src'); audio.load(); ready = false; chosen = null; $('song-search').value = ''; closeSuggestions(); $('retry-music').hidden = true; status(); render(); loadPreview(); }
-async function nextEndless(genre = $('genre').value) {
+async function nextEndless(genre = $('genre').value, difficulty = $('difficulty').value) {
   const version = ++roundRequest;
-  stopAudio(); status('Finding a fresh track from the live catalogue…'); $('retry-music').hidden = true;
+  roundLoading = true; loadVersion++; closeSuggestions(); chosen = null;
+  stopAudio(); status(`Finding your ${DIFFICULTIES[difficulty].label} track…`); $('retry-music').hidden = true;
+  document.querySelector('.game-panel').setAttribute('aria-busy', 'true');
+  for (const id of ['play', 'song-search', 'guess', 'skip']) $(id).disabled = true;
   try {
-    const { song } = await api(`random?genre=${encodeURIComponent(genre)}&exclude=${seen.slice(-500).join(',')}`);
+    const { song } = await api(`random?genre=${encodeURIComponent(genre)}&difficulty=${encodeURIComponent(difficulty)}&exclude=${seen.slice(-500).join(',')}`);
     if (version !== roundRequest) return;
-    remember([song]); seen.push(song.id); endlessGenre = genre; mode = 'endless'; $('genre').value = genre;
+    roundLoading = false;
+    remember([song]); seen.push(song.id); endlessGenre = genre; endlessDifficulty = difficulty; mode = 'endless'; $('genre').value = genre; $('difficulty').value = difficulty;
+    try { localStorage.setItem('needle-drop:difficulty', JSON.stringify(difficulty)); } catch { /* The current session still keeps the level. */ }
     endless = newRound(song, utcDay(now())); round = endless; loadRound();
-  } catch { if (version === roundRequest) { $('genre').value = mode === 'daily' ? 'All' : endlessGenre; musicError(() => nextEndless(genre)); } }
+  } catch (error) {
+    if (version !== roundRequest) return;
+    roundLoading = false; $('genre').value = mode === 'daily' ? 'All' : endlessGenre; $('difficulty').value = endlessDifficulty;
+    if (mode === 'daily' && daily) round = daily;
+    if (round) { render(); $('play').disabled = false; }
+    else document.querySelector('.game-panel').setAttribute('aria-busy', 'false');
+    musicError(() => nextEndless(genre, difficulty), error.message);
+  }
 }
-function setMode(next) { roundRequest++; if (mode === next && round) return; if (next === 'daily') { if (!daily) { mode = 'daily'; refreshDaily(); return; } mode = 'daily'; $('genre').value = 'All'; round = daily; loadRound(); } else { $('genre').value = endlessGenre; if (endless) { mode = 'endless'; round = endless; loadRound(); } else nextEndless(); } }
+function setMode(next) {
+  const wasLoading = roundLoading;
+  roundRequest++; roundLoading = false;
+  if (mode === next && round && !wasLoading) return;
+  $('difficulty').value = endlessDifficulty;
+  if (next === 'daily') {
+    mode = 'daily'; $('genre').value = 'All';
+    if (!daily) { refreshDaily(); return; }
+    round = daily; loadRound();
+  } else {
+    $('genre').value = endlessGenre;
+    if (endless) { mode = 'endless'; round = endless; loadRound(); }
+    else nextEndless();
+  }
+}
 $('daily-mode').onclick = () => setMode('daily'); $('endless-mode').onclick = () => setMode('endless');
 $('genre').onchange = () => nextEndless();
+$('difficulty').onchange = () => nextEndless();
 $('help-button').onclick = () => $('help-dialog').showModal(); $('close-help').onclick = $('start-playing').onclick = () => $('help-dialog').close();
 $('help-dialog').addEventListener('click', e => { if (e.target === $('help-dialog')) { const r = e.target.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) e.target.close(); } });
 async function refreshDaily() {
@@ -214,14 +249,30 @@ async function refreshDaily() {
     const { date, song } = await api('daily'); remember([song]);
     const saved = storageRead(`needle-drop:v2:${date}`); if (Array.isArray(saved?.songs)) remember(saved.songs);
     daily = restoreRound(saved, song, date, catalog);
-    if (mode === 'daily') { round = daily; loadRound(); }
-  } catch { dailyRetryAt = Date.now() + 60000; if (mode === 'daily') musicError(refreshDaily); }
+    if (mode === 'daily' && !roundLoading) { round = daily; loadRound(); }
+  } catch { dailyRetryAt = Date.now() + 60000; if (mode === 'daily' && !roundLoading) musicError(refreshDaily); }
   finally { dailyLoading = false; }
 }
 function registerAgentTools() {
   if (!document.modelContext?.registerTool) return;
   try {
-    Promise.resolve(document.modelContext.registerTool({ name: 'start_endless_round', title: 'Start an endless song round', description: 'Switch to endless mode and load a song from live genre stations, preserving daily progress.', inputSchema: { type: 'object', properties: { genre: { type: 'string', enum: ['All', 'Pop', 'Rock', 'Hip-Hop', 'Electronic', 'R&B', 'Country'] } }, required: ['genre'], additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: false }, async execute(input) { if (!input || !['All', 'Pop', 'Rock', 'Hip-Hop', 'Electronic', 'R&B', 'Country'].includes(input.genre)) throw new Error('Choose a supported genre.'); $('genre').value = input.genre; await nextEndless(); if (!$('retry-music').hidden) throw new Error('Music could not be loaded.'); return { mode, genre: input.genre, guessesRemaining: 6, clipSeconds: 1 }; } })).catch(() => {});
+    Promise.resolve(document.modelContext.registerTool({
+      name: 'start_endless_round', title: 'Start an endless song round',
+      description: 'Start a song round with a genre and optional difficulty, preserving daily progress.',
+      inputSchema: { type: 'object', properties: {
+        genre: { type: 'string', enum: ['All', 'Pop', 'Rock', 'Hip-Hop', 'Electronic', 'R&B', 'Country'] },
+        difficulty: { type: 'string', enum: Object.keys(DIFFICULTIES) },
+      }, required: ['genre'], additionalProperties: false },
+      annotations: { readOnlyHint: false, untrustedContentHint: false },
+      async execute(input) {
+        if (!input || !['All', 'Pop', 'Rock', 'Hip-Hop', 'Electronic', 'R&B', 'Country'].includes(input.genre)) throw new Error('Choose a supported genre.');
+        const difficulty = input.difficulty ?? endlessDifficulty;
+        if (!isDifficulty(difficulty)) throw new Error('Choose a supported difficulty.');
+        await nextEndless(input.genre, difficulty);
+        if (!$('retry-music').hidden) throw new Error($('status').textContent);
+        return { mode, genre: input.genre, difficulty, guessesRemaining: 6, clipSeconds: 1 };
+      },
+    })).catch(() => {});
   } catch { /* Optional browser capability; normal controls remain available. */ }
 }
 refreshDaily(); setInterval(updateClock, 1000); registerAgentTools();
