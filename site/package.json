@@ -1,0 +1,1 @@
+{"name":"needle-drop","private":true,"type":"module","scripts":{"dev":"node scripts/serve.mjs","start":"node scripts/serve.mjs","test":"node --test scripts/game.test.mjs scripts/music.test.mjs"}}

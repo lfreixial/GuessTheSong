@@ -1,0 +1,12 @@
+.git
+.codex
+.agents
+**/node_modules
+**/.data
+**/.env
+**/.env.*
+**/.openai
+**/.sites-*
+**/*.tar
+**/*.tar.gz
+**/*.log

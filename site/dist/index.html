@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111411">
+  <title>Needle Drop — Guess the song</title>
+  <meta name="description" content="How well do you know your music? Guess the song in six tries. Play the shared daily challenge or go endless with your favourite genre.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111411'/%3E%3Cpath d='M7 20V12m6 13V7m6 16V9m6 11v-8' stroke='%23c1f86b' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="Needle Drop home"><span class="brand-icon" aria-hidden="true">▂▆█▅</span> needle<span>drop</span><span class="brand-dot">®</span></a>
+    <button class="help-button" id="help-button"><span class="circle-help">?</span><span>How to play</span></button>
+  </header>
+  <main>
+    <section class="heading"><div class="eyebrow"><span class="live-dot"></span> LESS SCROLLING. MORE LISTENING.</div><h1>Know it when <br>you <em>hear it?</em></h1><p>A tiny clip. A familiar feeling. Name that song.</p></section>
+    <div class="game-layout">
+      <aside class="sidebar">
+        <div class="section-label">PICK YOUR SESSION</div>
+        <div class="mode-options" role="group" aria-label="Game mode">
+          <button class="mode-card active" id="daily-mode" aria-pressed="true"><span class="mode-icon">◷</span><span><strong>The daily drop</strong><small>One song. Everyone’s playing.</small></span><span class="mode-check">↗</span></button>
+          <button class="mode-card" id="endless-mode" aria-pressed="false"><span class="mode-icon infinity">∞</span><span><strong>Endless rotation</strong><small>Find your groove. Keep going.</small></span><span class="mode-check">↗</span></button>
+        </div>
+        <div class="genre-section"><div class="label-row"><label class="section-label" for="genre">YOUR GENRE</label><span id="genre-note">Endless mode</span></div><select id="genre" disabled><option value="All">All genres</option><option>Pop</option><option>Rock</option><option>Hip-Hop</option><option>Electronic</option><option>R&amp;B</option><option>Country</option></select><p id="genre-description">Today’s track is the same for everyone.<br>Come back for a fresh drop tomorrow.</p></div>
+        <div class="small-note"><span>♫</span><p>Trust your ears.<br><strong>You probably know this one.</strong></p></div>
+      </aside>
+      <section class="game-panel" aria-label="Song guessing game" aria-busy="true">
+        <div class="game-topline"><span class="daily-label" id="session-label">DAILY DROP</span><span class="date-label" id="date-label"></span></div>
+        <div class="player">
+          <div class="track-label" id="track-label">THE MYSTERY TRACK</div>
+          <h2 id="player-title">A little sound. A big clue.</h2>
+          <p id="player-subtitle">Press play and see what rings a bell.</p>
+          <div class="waveform" id="waveform" aria-hidden="true"></div>
+          <div class="timeline"><span id="elapsed">0:00</span><span><strong id="clip-length">1s</strong> unlocked <span class="timeline-divider">/</span> 16s</span></div>
+          <div class="play-row"><button id="play" class="play-button" disabled aria-label="Play song clip"><span id="play-icon">▶</span></button><div class="play-copy"><strong id="play-caption">Loading the record…</strong><span id="clip-description">Start with a one-second clip</span></div><label class="volume-label"><span aria-hidden="true">♪</span><span class="sr-only">Volume</span><input id="volume" type="range" min="0" max="1" step="0.05" value="0.8" aria-label="Volume"></label></div>
+        </div>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+        <button id="retry-music" class="skip-button" type="button" hidden>Retry loading music</button>
+        <div id="result" class="result" hidden></div>
+        <form id="guess-form" autocomplete="off"><label for="song-search" class="guess-label">GOT A SONG IN MIND?</label><div class="search-wrapper"><span class="search-icon" aria-hidden="true">⌕</span><input type="text" id="song-search" placeholder="Search for a song or artist…" role="combobox" aria-autocomplete="list" aria-controls="suggestions" aria-expanded="false" disabled><kbd aria-hidden="true">↵</kbd><ul id="suggestions" role="listbox" hidden></ul></div><div class="guess-actions"><span id="attempt-label">6 guesses to find your song</span><button type="button" id="skip" class="skip-button" disabled>Skip <span>+1s →</span></button><button type="submit" id="guess" class="guess-button" disabled>Make a guess <span>↗</span></button></div></form>
+        <div class="attempts-heading"><span class="section-label">YOUR GUESSES</span><span id="attempt-count">0 / 6</span></div><ol class="attempts" id="attempts"></ol>
+        <div class="game-bottom"><span id="bottom-caption">A new track, every day.</span><span id="reset-timer"></span></div>
+      </section>
+    </div>
+    <div class="how-strip"><span><b>01</b> Listen to the clip</span><i>／</i><span><b>02</b> Make your guess</span><i>／</i><span><b>03</b> Miss? Hear a little more.</span></div>
+  </main>
+  <footer><span>For the love of the first few seconds.</span><span>Music previews by <a href="https://www.deezer.com" target="_blank" rel="noreferrer">Deezer ↗</a></span></footer>
+  <dialog id="help-dialog"><button id="close-help" class="close-dialog" aria-label="Close help">×</button><span class="eyebrow">GET INTO THE GROOVE</span><h2>Six tries.<br>One mystery song.</h2><ol><li>Play the clip. You start with just one second.</li><li>Search for a song or artist, choose a result, and submit your guess.</li><li>Wrong guesses and skips unlock 2, 4, 7, 11, then 16 seconds.</li></ol><p><strong>The daily drop</strong> is the same song for everyone and resets at midnight UTC. Your progress stays on this browser.</p><p><strong>Endless rotation</strong> gives you fresh songs from your chosen genre. Finish a round to play another.</p><p class="muted">Clips are excerpts, not necessarily song intros. Some songs contain explicit lyrics. Audio availability depends on Deezer and your region.</p><button id="start-playing" class="guess-button">Let’s play ↗</button></dialog>
+</body>
+</html>
