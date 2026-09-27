@@ -1,15 +1,89 @@
+x-monitoring-service: &monitoring-service
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   game:
     build: .
     ports:
       - "${GAME_BIND:-127.0.0.1}:${GAME_PORT:-8080}:4173"
     environment:
+      METRICS_HOST: "0.0.0.0"
+      METRICS_PORT: "9464"
+      NEEDLE_DROP_LOG_DIR: /data/logs
       TRUSTED_PROXY_IPS: "${TRUSTED_PROXY_IPS:-}"
     volumes:
       - daily-songs:/data
     restart: unless-stopped
     init: true
     stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  prometheus:
+    <<: *monitoring-service
+    image: prom/prometheus:v3.13.3
+    mem_limit: 512m
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=1GB
+    volumes:
+      - ./monitoring/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yaml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+
+  loki:
+    <<: *monitoring-service
+    image: grafana/loki:3.7.0
+    mem_limit: 1g
+    command: [-config.file=/etc/loki/config.yaml]
+    volumes:
+      - ./monitoring/loki.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+
+  alloy:
+    <<: *monitoring-service
+    image: grafana/alloy:v1.20.0
+    mem_limit: 256m
+    depends_on: [game, loki]
+    command: [run, --storage.path=/var/lib/alloy, /etc/alloy/config.alloy]
+    volumes:
+      - ./monitoring/config.alloy:/etc/alloy/config.alloy:ro
+      - daily-songs:/app-data:ro
+      - alloy-data:/var/lib/alloy
+
+  grafana:
+    <<: *monitoring-service
+    image: grafana/grafana:13.2.2
+    mem_limit: 512m
+    depends_on: [prometheus, loki]
+    ports:
+      - "${GRAFANA_BIND:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env or run node scripts/monitoring.mjs init}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/needle-drop.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
 
 volumes:
   daily-songs:
+  prometheus-data:
+  loki-data:
+  alloy-data:
+  grafana-data:

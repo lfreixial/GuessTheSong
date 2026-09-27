@@ -4,7 +4,7 @@ Song guessing with a shared UTC daily challenge, six expanding clips, and endles
 
 ## Run
 
-For Docker, run `docker compose up --build -d` from the repository root and visit http://localhost:8080. Compose preserves the daily song in a named volume. See the root README for Docker commands.
+For Docker, configure `.env` as described in the root README, then run `docker compose up --build -d` from the repository root. The game opens at http://localhost:8080 and Grafana at http://localhost:3000; monitoring starts with the app. Compose preserves the daily song in a named volume. See the root README for Docker commands.
 
 Node.js 20 or newer is required. No dependencies need installing.
 

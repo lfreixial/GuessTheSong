@@ -1,0 +1,19 @@
+apiVersion: 1
+datasources:
+  - name: Needle Drop metrics
+    uid: needle-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s
+  - name: Needle Drop logs
+    uid: needle-loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000

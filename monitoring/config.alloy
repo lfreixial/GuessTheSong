@@ -1,0 +1,36 @@
+logging {
+  level = "warn"
+}
+
+local.file_match "app" {
+  path_targets = [{"__path__" = "/app-data/logs/app-*.jsonl", "app" = "needle-drop"}]
+  sync_period = "5s"
+}
+
+loki.source.file "app" {
+  targets    = local.file_match.app.targets
+  forward_to = [loki.process.app.receiver]
+}
+
+loki.process "app" {
+  stage.json {
+    expressions = {level = "level", time = "time"}
+  }
+  stage.timestamp {
+    source = "time"
+    format = "RFC3339Nano"
+  }
+  stage.labels {
+    values = {level = ""}
+  }
+  stage.label_drop {
+    values = ["filename"]
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

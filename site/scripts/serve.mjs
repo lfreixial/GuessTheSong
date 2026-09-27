@@ -1,18 +1,23 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { resolve, extname, sep } from 'node:path';
+import { resolve, extname, sep, dirname } from 'node:path';
 import { createMusicService, GENRES } from './music.mjs';
 import { isDifficulty } from '../dist/difficulties.js';
 import { createLobbyService } from './lobbies.mjs';
 import { createLobbyRouter, trustedProxyIPs } from './lobby-api.mjs';
+import { createMonitoring } from './monitoring.mjs';
 const root = resolve('dist');
-const music = createMusicService({ dataDir: resolve(process.env.NEEDLE_DROP_DATA_DIR || '.data/daily') });
-const lobbies = createLobbyService({ music });
-const lobbyRoute = createLobbyRouter(lobbies, { trustedProxies: trustedProxyIPs(process.env.TRUSTED_PROXY_IPS) });
+const dataDir = resolve(process.env.NEEDLE_DROP_DATA_DIR || '.data/daily');
+const monitoring = await createMonitoring({ dataDir: resolve(dirname(dataDir), 'monitoring'), logDir: process.env.NEEDLE_DROP_LOG_DIR });
+const music = createMusicService({ dataDir });
+const lobbies = createLobbyService({ music, onEvent: monitoring.event });
+monitoring.setSnapshot(lobbies.stats);
+const lobbyRoute = createLobbyRouter(lobbies, { trustedProxies: trustedProxyIPs(process.env.TRUSTED_PROXY_IPS), log: monitoring.log });
 const lobbyTimer = setInterval(() => lobbies.tick(), 250);
 lobbyTimer.unref();
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json' };
 const server = createServer(async (req, res) => {
+  monitoring.observeHttp(req, res);
   try {
     const url = new URL(req.url, 'http://localhost');
     if (await lobbyRoute(req, res, url)) return;
@@ -34,15 +39,27 @@ const server = createServer(async (req, res) => {
         const match = url.pathname.match(/^\/api\/track\/(\d+)$/);
         if (match) { json(200, await music.preview(Number(match[1]))); return; }
         json(404, { error: 'Not found.' });
-      } catch (error) { console.error('Music request failed:', error.message); json(503, { error: error.code === 'EMPTY_POOL' ? error.message : 'Music could not be loaded. Please retry in a moment.' }); }
+      } catch (error) { monitoring.log('error', 'music_request_failed'); json(503, { error: error.code === 'EMPTY_POOL' ? error.message : 'Music could not be loaded. Please retry in a moment.' }); }
       return;
     }
     const path = resolve(root, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
     if (!path.startsWith(root + sep)) { res.writeHead(403).end(); return; }
     const body = await readFile(path); res.writeHead(200, { 'Content-Type': types[extname(path)] || 'application/octet-stream', 'Cache-Control': 'no-store' }).end(body);
   } catch { res.writeHead(404).end('Not found'); }
-}).listen(Number(process.env.PORT || 4173), process.env.HOST || '127.0.0.1', () => console.log(`Needle Drop is ready at http://localhost:${process.env.PORT || 4173}`));
+}).listen(Number(process.env.PORT || 4173), process.env.HOST || '127.0.0.1', () => monitoring.log('info', 'server_started'));
+// Separate listener: never publish the metrics port through the public game proxy.
+const metricsServer = process.env.METRICS_PORT ? createServer((req, res) => {
+  if (req.method !== 'GET' || req.url !== '/metrics') { res.writeHead(404).end(); return; }
+  res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8', 'Cache-Control': 'no-store' }).end(monitoring.render());
+}).listen(Number(process.env.METRICS_PORT), process.env.METRICS_HOST || '127.0.0.1') : null;
+for (const listener of [server, metricsServer].filter(Boolean)) listener.on('error', async () => {
+  monitoring.log('error', 'listener_failed'); await monitoring.close(); process.exit(1);
+});
+let stopping = false;
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
-  server.close(() => process.exit(0));
-  setTimeout(() => process.exit(1), 15000).unref();
+  if (stopping) return; stopping = true;
+  monitoring.log('info', 'server_stopping'); clearInterval(lobbyTimer);
+  metricsServer?.close();
+  server.close(async () => { await monitoring.close(); process.exit(0); });
+  setTimeout(async () => { await monitoring.close(); process.exit(1); }, 15000).unref();
 });

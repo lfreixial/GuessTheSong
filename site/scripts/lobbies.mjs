@@ -32,7 +32,7 @@ function settingsFor(value = {}, current = DEFAULTS) {
   return s;
 }
 
-export function createLobbyService({ music, now = Date.now }) {
+export function createLobbyService({ music, now = Date.now, onEvent = () => {} }) {
   const rooms = new Map();
   function changed(room) {
     room.version++;
@@ -63,6 +63,7 @@ export function createLobbyService({ music, now = Date.now }) {
   function host(room, p) { requireThat(room.hostId === p.id, 'Only the host can do that.', 403); }
   function finishRound(room) {
     if (room.phase !== 'playing') return;
+    onEvent('round_finished');
     room.phase = 'reveal'; room.revealEndsAt = now() + REVEAL_MS;
     changed(room);
   }
@@ -86,6 +87,7 @@ export function createLobbyService({ music, now = Date.now }) {
       changed(room);
     } catch {
       if (room.generation !== generation || !rooms.has(room.code)) return;
+      onEvent('track_load_failed');
       room.phase = 'load-error'; room.error = 'This track could not be loaded. The host can retry or return to the lobby to change settings. No points were lost.';
       changed(room);
     }
@@ -98,7 +100,7 @@ export function createLobbyService({ music, now = Date.now }) {
     if (room.phase === 'countdown' && now() >= room.round.startsAt) { room.phase = 'playing'; changed(room); }
     if (room.phase === 'playing' && (now() >= room.round.endsAt || (room.settings.endEarly && everyoneDone(room)))) finishRound(room);
     if (room.phase === 'reveal' && now() >= room.revealEndsAt) {
-      if (room.round.number >= room.settings.tracks) { room.phase = 'finished'; changed(room); }
+      if (room.round.number >= room.settings.tracks) { room.phase = 'finished'; onEvent('game_finished'); changed(room); }
       else void loadNext(room);
     }
     const currentHost = room.players.get(room.hostId);
@@ -135,7 +137,7 @@ export function createLobbyService({ music, now = Date.now }) {
     do { code = Array.from({ length: 6 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code));
     const room = { code, hostId: p.id, players: new Map([[p.id, p]]), settings: settingsFor(settings), phase: 'waiting',
       touched: now(), generation: 0, version: 1, waiters: new Set(), seen: [], choices: new Map(), round: null, error: '' };
-    rooms.set(code, room); return credentials(room, p);
+    rooms.set(code, room); onEvent('lobby_created'); onEvent('player_joined'); return credentials(room, p);
   }
   function join(code, name) {
     const room = find(code); advance(room);
@@ -143,7 +145,7 @@ export function createLobbyService({ music, now = Date.now }) {
     requireThat(room.players.size < room.settings.maxPlayers, 'This lobby is full.', 409);
     const p = player(name);
     requireThat(![...room.players.values()].some(other => other.name.toLowerCase() === p.name.toLowerCase()), 'That name is taken. Choose another name.');
-    room.players.set(p.id, p); room.touched = now(); changed(room); return credentials(room, p);
+    room.players.set(p.id, p); onEvent('player_joined'); room.touched = now(); changed(room); return credentials(room, p);
   }
   function state(code, token) {
     const room = find(code); const p = authenticate(room, token); return snapshot(room, p);
@@ -196,6 +198,7 @@ export function createLobbyService({ music, now = Date.now }) {
       requireThat(!result.guesses.some(guess => guess.id === song.id), 'You already guessed that song.');
       p.lastGuess = now();
       result.correct = sameSong(song, r.song);
+      onEvent(result.correct ? 'guess_correct' : 'guess_incorrect');
       result.guesses.push({ id: song.id, title: song.title, artist: song.artist, correct: result.correct });
       if (result.correct) { result.points = pointsFor(now() - r.startsAt, result.skips); p.score += result.points; }
       changed(room);
@@ -208,7 +211,7 @@ export function createLobbyService({ music, now = Date.now }) {
       requireThat(Number.isInteger(input.step) && input.step >= 1 && input.step < CLIPS.length, 'Choose a valid clip step.');
       requireThat(input.step <= currentStep + 1, 'Unlock one clip at a time.', 409);
       // A retry, or a request overtaken by an automatic unlock, must not charge twice.
-      if (input.step > currentStep) { result.unlockedStep = input.step; result.skips++; changed(room); }
+      if (input.step > currentStep) { result.unlockedStep = input.step; result.skips++; onEvent('hear_more'); changed(room); }
     } else if (input.type === 'ready') {
       requireThat(room.phase === 'waiting', 'The game has already started.', 409);
       requireThat(typeof input.ready === 'boolean', 'Invalid ready status.');
@@ -233,7 +236,7 @@ export function createLobbyService({ music, now = Date.now }) {
         const connected = active(room);
         requireThat(connected.length >= 2, 'At least two connected players are needed.');
         requireThat(connected.every(p => p.ready), 'Wait for everyone to press Ready.');
-        void loadNext(room);
+        onEvent('game_started'); void loadNext(room);
       } else if (input.type === 'retry') {
         requireThat(room.phase === 'load-error', 'There is no failed track to retry.', 409); void loadNext(room);
       } else if (input.type === 'next') {
@@ -255,5 +258,14 @@ export function createLobbyService({ music, now = Date.now }) {
       else advance(room);
     }
   }
-  return { create, join, state, waitForState, search, action, tick };
+  function stats() {
+    const phases = Object.fromEntries(['waiting', 'loading', 'countdown', 'playing', 'reveal', 'finished', 'load-error'].map(phase => [phase, 0]));
+    let connectedPlayers = 0, seats = 0, lobbies = 0;
+    for (const room of rooms.values()) {
+      if (now() - room.touched >= ROOM_TTL) continue;
+      phases[room.phase]++; lobbies++; seats += room.players.size; connectedPlayers += active(room).length;
+    }
+    return { connectedPlayers, seats, lobbies, phases, running: phases.loading + phases.countdown + phases.playing + phases.reveal };
+  }
+  return { create, join, state, waitForState, search, action, tick, stats };
 }

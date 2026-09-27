@@ -8,13 +8,13 @@ In expanding-clip mode, each player can press **Hear more** to unlock the next l
 
 ## Run with Docker
 
-Install and start Docker Desktop (Linux containers), then run from this repository:
+Install and start Docker Desktop (Linux containers). On a fresh checkout, copy `.env.example` to `.env` and set `GRAFANA_ADMIN_PASSWORD`, or run `node scripts/monitoring.mjs init` to generate one. Then run from this repository:
 
 ```sh
 docker compose up --build -d
 ```
 
-Open **http://localhost:8080**.
+Open the game at **http://localhost:8080** and Grafana at **http://localhost:3000**. The app, Grafana, Prometheus, Loki and Alloy start together.
 
 ```sh
 docker compose logs -f game
@@ -42,6 +42,12 @@ In PowerShell, use `$env:GAME_BIND="0.0.0.0"` followed by `docker compose up --b
 For friends outside your network, deploy this Node app behind a shared HTTPS address. Run one server instance: active lobbies live in memory and close when the server restarts. Daily songs still persist in the Docker volume. No external multiplayer service or accounts are required.
 
 Lobby updates wait for changes rather than reloading every second, and simultaneous music requests share cached lookups. For reverse-proxy IP configuration and measured performance results, see [deployment and performance](site/README.md#deployment-and-performance).
+
+## Monitoring
+
+**Grafana, Prometheus, Loki and Alloy start automatically with `docker compose up --build -d`.** Open http://localhost:3000/d/needle-drop and sign in as `admin` with `GRAFANA_ADMIN_PASSWORD` from `.env`.
+
+The dashboard includes app traffic, connected multiplayer players, persistent player/lobby totals, running games, CPU, memory, errors and searchable JSON logs. Metrics and log backends stay private. Starting the stack rebuilds the app and closes active lobbies; deploy between games. See [monitoring setup and metric definitions](monitoring/README.md).
 
 ## Run without Docker
 

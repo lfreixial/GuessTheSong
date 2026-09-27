@@ -1,0 +1,1189 @@
+{
+  "uid": "needle-drop",
+  "title": "Needle Drop · App monitoring",
+  "tags": [
+    "needle-drop"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "editable": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "What these numbers mean",
+      "type": "text",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Players = multiplayer lobby seats.** Connected means seen in the last 20 seconds. Totals include hosts and repeat joins, exclude solo play, and persist in the app data volume. **Traffic = HTTP body bytes handled by the app**, excluding protocol overhead, upstream Deezer API traffic and music streamed directly to browsers. Rate/period panels use sampled counters; totals begin when monitoring is installed. Metrics: up to 15 days / 1 GB. Logs: 7 days. **Alert rules below do not send external notifications.**"
+      }
+    },
+    {
+      "id": 2,
+      "title": "App up",
+      "type": "stat",
+      "description": "1 = the app metrics listener is reachable; 0 = unreachable.",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "min(up{job=\"needle-drop\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Connected players",
+      "type": "stat",
+      "description": "Multiplayer seats active in the last 20 seconds.",
+      "gridPos": {
+        "x": 4,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_players_connected)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Player joins — all time",
+      "type": "stat",
+      "description": "Persisted seat joins including hosts, not unique people. Starts at monitoring installation.",
+      "gridPos": {
+        "x": 8,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_events_total{event=\"player_joined\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Running games",
+      "type": "stat",
+      "description": "Loading, countdown, playing and reveal phases.",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_lobbies_running)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Current lobbies",
+      "type": "stat",
+      "description": "All unexpired lobbies, including waiting and finished. Idle lobbies expire after two hours.",
+      "gridPos": {
+        "x": 16,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_lobbies_current)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Lobbies created — all time",
+      "type": "stat",
+      "description": "Persisted successful lobby creations since monitoring installation.",
+      "gridPos": {
+        "x": 20,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_events_total{event=\"lobby_created\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "App download to players — selected period",
+      "type": "stat",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(needle_http_response_body_bytes_total[$__range]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "{{route}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "App uploads from players — selected period",
+      "type": "stat",
+      "description": "",
+      "gridPos": {
+        "x": 6,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(needle_http_request_body_bytes_total[$__range]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "{{route}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Games started — all time",
+      "type": "stat",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_events_total{event=\"game_started\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "{{route}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Games finished — all time",
+      "type": "stat",
+      "description": "",
+      "gridPos": {
+        "x": 18,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_events_total{event=\"game_finished\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "{{route}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "App traffic rate",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(needle_http_response_body_bytes_total[$__rate_interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "To players",
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(needle_http_request_body_bytes_total[$__rate_interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "From players"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Players over time",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 11,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_players_connected)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "Connected",
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "expr": "sum(needle_player_seats)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "Seats including disconnected"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Lobbies by phase",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (phase) (needle_lobbies_phase)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "{{phase}}",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "title": "New joins / lobbies / games per minute",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 19,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (event) (rate(needle_events_total{event=~\"player_joined|lobby_created|game_started\"}[$__rate_interval])) * 60",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "{{event}}",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "title": "HTTP requests per second",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (route) (rate(needle_http_requests_total[$__rate_interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "{{route}}",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "title": "HTTP errors per second",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 27,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(needle_http_requests_total{status=~\"[45]..\"}[$__rate_interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "{{status}}",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "title": "95th percentile response time — excludes lobby waits",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(needle_http_duration_seconds_bucket{route!=\"/api/lobbies/:code/wait\",route!=\"/healthz\"}[$__rate_interval])))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "{{route}}",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "title": "Open requests including lobby waits",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 35,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_http_in_flight)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "Requests",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "title": "App CPU — cores used",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(process_cpu_seconds_total{job=\"needle-drop\"}[$__rate_interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "Cores",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "title": "App memory",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 43,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(process_resident_memory_bytes{job=\"needle-drop\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "Resident",
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "expr": "sum(process_heap_used_bytes{job=\"needle-drop\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "JS heap"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "title": "Track load failures / minute",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(needle_events_total{event=\"track_load_failed\"}[$__rate_interval])) * 60",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "Failures",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "title": "Answers and skips / minute",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (event) (rate(needle_events_total{event=~\"guess_correct|guess_incorrect|hear_more\"}[$__rate_interval])) * 60",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "{{event}}",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "title": "Monitoring write errors and dropped logs — since restart",
+      "type": "timeseries",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{__name__=~\"needle_(persistence_errors|log_write_errors|logs_dropped)_total\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "{{__name__}}",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "title": "Pending / firing alerts",
+      "type": "table",
+      "description": "No rows means no active rules. Outbound notifications are not configured.",
+      "gridPos": {
+        "x": 12,
+        "y": 59,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ALERTS{alertstate=~\"pending|firing\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "",
+          "instant": true,
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "title": "Application logs",
+      "type": "logs",
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 67,
+        "w": 24,
+        "h": 12
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "needle-loki"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{app=\"needle-drop\", level=~\"$level\"} | json",
+          "datasource": {
+            "type": "loki",
+            "uid": "needle-loki"
+          }
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "level",
+        "label": "Log level",
+        "type": "custom",
+        "query": "info,warn,error",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  }
+}

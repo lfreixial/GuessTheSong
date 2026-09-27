@@ -1,0 +1,30 @@
+groups:
+  - name: needle-drop
+    rules:
+      - alert: NeedleDropUnavailable
+        expr: up{job="needle-drop"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: App metrics have been unreachable for a minute
+      - alert: NeedleDropServerErrors
+        expr: sum(rate(needle_http_requests_total{status=~"5.."}[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: App is returning more than six server errors per minute
+      - alert: NeedleDropMonitoringWriteFailure
+        expr: increase(needle_persistence_errors_total[5m]) > 0 or increase(needle_log_write_errors_total[5m]) > 0 or increase(needle_logs_dropped_total[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Monitoring data could not be persisted or logs were dropped
+      - alert: NeedleDropLobbyCapacity
+        expr: needle_lobbies_current > 180
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 90 percent of lobby slots are in use

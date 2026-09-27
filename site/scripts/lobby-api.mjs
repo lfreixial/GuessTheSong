@@ -41,7 +41,7 @@ function readJSON(req) {
   });
 }
 
-export function createLobbyRouter(lobbies, { waitMs = 15000, trustedProxies = new Set() } = {}) {
+export function createLobbyRouter(lobbies, { waitMs = 15000, trustedProxies = new Set(), log = () => {} } = {}) {
   const limits = new Map();
   return async function route(req, res, url) {
     if (!url.pathname.startsWith('/api/lobbies')) return false;
@@ -83,7 +83,7 @@ export function createLobbyRouter(lobbies, { waitMs = 15000, trustedProxies = ne
       else throw new LobbyError('Method not allowed.', 405);
     } catch (error) {
       if (res.destroyed) return true;
-      if (!(error instanceof LobbyError)) console.error('Lobby request failed:', error.message);
+      if (!(error instanceof LobbyError)) log('error', 'lobby_request_failed');
       json(error instanceof LobbyError ? error.status : 503, { error: error instanceof LobbyError ? error.message : 'The lobby service is temporarily unavailable. Please retry.' });
     }
     return true;
