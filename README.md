@@ -6,6 +6,8 @@ The game uses Deezer's live charts, genre stations and song search, with a share
 
 In expanding-clip mode, each player can press **Hear more** to unlock the next longer clip immediately. Each skip reduces their time-based points by 20%, without spending a guess or affecting anyone else.
 
+**Skip song** reveals the answer immediately in solo mode (a daily skip saves a loss). In multiplayer, it gives up your answer for zero points while others keep guessing. With the host’s early-finish setting enabled, the round reveals as soon as all connected players have answered, skipped, or run out of guesses. **Hear more** remains a separate control for longer clips.
+
 ## Run with Docker
 
 Install and start Docker Desktop (Linux containers). On a fresh checkout, copy `.env.example` to `.env` and set `GRAFANA_ADMIN_PASSWORD`, or run `node scripts/monitoring.mjs init` to generate one. Then run from this repository:
@@ -41,13 +43,13 @@ In PowerShell, use `$env:GAME_BIND="0.0.0.0"` followed by `docker compose up --b
 
 For friends outside your network, deploy this Node app behind a shared HTTPS address. Run one server instance: active lobbies live in memory and close when the server restarts. Daily songs still persist in the Docker volume. No external multiplayer service or accounts are required.
 
-Lobby updates wait for changes rather than reloading every second, and simultaneous music requests share cached lookups. For reverse-proxy IP configuration and measured performance results, see [deployment and performance](site/README.md#deployment-and-performance).
+Waiting rooms refresh once a second so Ready changes reach the host promptly; active games wait for changes, and simultaneous music requests share cached lookups. For reverse-proxy IP configuration and measured performance results, see [deployment and performance](site/README.md#deployment-and-performance).
 
 ## Monitoring
 
 **Grafana, Prometheus, Loki and Alloy start automatically with `docker compose up --build -d`.** Open http://localhost:3000/d/needle-drop and sign in as `admin` with `GRAFANA_ADMIN_PASSWORD` from `.env`.
 
-The dashboard includes app traffic, connected multiplayer players, persistent player/lobby totals, running games, CPU, memory, errors and searchable JSON logs. Metrics and log backends stay private. Starting the stack rebuilds the app and closes active lobbies; deploy between games. See [monitoring setup and metric definitions](monitoring/README.md).
+The dashboard includes app traffic, connected solo and multiplayer players, persistent session/join/lobby totals, running games, CPU, memory, errors and searchable JSON logs. Metrics and log backends stay private. Starting the stack rebuilds the app and closes active lobbies; deploy between games. See [monitoring setup and metric definitions](monitoring/README.md).
 
 ## Run without Docker
 

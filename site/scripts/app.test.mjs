@@ -23,6 +23,7 @@ async function setup(preference = 'easy') {
   get('genre').value = 'All';
   const response = (body, ok = true) => ({ ok, headers: { get: () => null }, json: async () => body });
   const context = vm.createContext({ ...game, ...difficulties, AbortSignal, console,
+    createSoloPresence: () => ({ start() {} }),
     document: { getElementById: get, createElement: element, querySelector: get, addEventListener() {} },
     Audio: class { paused = true; currentTime = 0; pause() {} load() {} removeAttribute() {} addEventListener() {} },
     localStorage: { getItem: key => stored.get(key), setItem: (key, value) => stored.set(key, value) },
@@ -99,4 +100,21 @@ test('stale level responses cannot replace a newer choice or the daily round', a
 test('unknown saved preferences fall back to Easy', async () => {
   const app = await setup('toString');
   assert.equal(app.get('difficulty').value, 'easy');
+});
+
+test('skip song reveals and saves the daily loss and enables the next endless track', async () => {
+  const app = await setup();
+  app.run('skipSong()');
+  assert.equal(app.run('isFinished(round)'), true); assert.equal(app.run('hasWon(round)'), false);
+  assert.equal(app.get('guess-form').hidden, true); assert.equal(app.get('skip-song').hidden, true);
+  assert.equal(JSON.parse(app.stored.get(`needle-drop:v2:${game.utcDay()}`)).passed, true);
+  app.run('setMode("endless")'); app.pending[0].succeed(2); await flush();
+  assert.equal(app.get('skip-song').hidden, false); assert.equal(app.get('skip-song').disabled, false);
+  app.run('skipSong()');
+  assert.equal(app.run('isFinished(round)'), true);
+  const next = app.get('result').children[1].children[0];
+  next.onclick(); assert.equal(app.get('skip-song').disabled, true);
+  app.pending[1].succeed(3); await flush();
+  assert.equal(app.run('round.trackId'), 3); assert.equal(app.run('isFinished(round)'), false);
+  app.run('setMode("daily")'); assert.equal(app.run('round.passed'), true);
 });

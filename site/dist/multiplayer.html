@@ -33,14 +33,15 @@
               <label>Listening mode<select id="setting-clip"><option value="progressive">Expanding clips</option><option value="full">Full preview</option></select></label>
             </div><label class="checkbox-label"><input id="setting-early" type="checkbox" checked> End the round when everyone has finished</label><button class="skip-button" id="save-settings" type="submit">Save settings</button><span id="settings-dirty" class="party-muted" hidden>Unsaved changes</span></fieldset></form>
             <p id="settings-summary" class="party-muted"></p><div class="lobby-controls"><button id="ready-button" class="guess-button">Ready up</button><button id="start-game" class="guess-button" hidden>Start game ↗</button></div>
-            <p class="party-muted">Every track lasts up to 60 seconds. Faster guesses earn up to 1,000 points. In expanding-clip mode, each skip unlocks more audio for you and reduces your time-based points by 20%. Settings changes reset everyone’s ready status.</p>
+            <p id="start-note" class="party-muted" role="status"></p>
+            <p class="party-muted">Every track lasts up to 60 seconds. Faster guesses earn up to 1,000 points. In expanding-clip mode, each skip unlocks more audio for you and reduces your time-based points by 20%. Skip song gives up your answer for zero points. With early finish enabled, everyone answering or skipping ends the round immediately. Settings changes reset everyone’s ready status.</p>
           </section>
           <section id="round-panel" class="party-card" hidden>
             <div class="round-top"><span id="round-label" class="daily-label"></span><strong id="round-timer" class="round-timer" role="timer"></strong></div>
             <h2 id="round-title"></h2><p id="round-note" class="party-muted"></p>
             <div class="round-progress"><div id="round-progress-fill"></div></div>
             <div class="party-player"><button id="party-play" class="play-button" aria-label="Play song clip" disabled>▶</button><div><strong id="audio-label">Get your ears ready.</strong><span id="audio-note" class="party-muted"></span></div><label class="volume-label"><span class="sr-only">Volume</span><input id="party-volume" type="range" min="0" max="1" step="0.05" value="0.8" aria-label="Volume"></label></div>
-            <div class="clip-actions"><button id="hear-more" class="skip-button" type="button" disabled>Hear more → 2s (−20% points)</button><span id="potential-points" class="party-muted" hidden></span></div>
+            <div class="clip-actions"><button id="hear-more" class="skip-button" type="button" disabled>Hear more → 2s (−20% points)</button><button id="party-skip-song" class="skip-button" type="button" disabled>Skip song · 0 points</button><span id="potential-points" class="party-muted" hidden></span></div>
             <p id="audio-error" class="status error" role="status"></p>
             <form id="party-guess-form" autocomplete="off"><label for="party-search">Name that song</label><div class="search-wrapper"><input id="party-search" type="text" placeholder="Search song or artist…" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="party-suggestions"><ul id="party-suggestions" role="listbox" hidden></ul></div><div class="guess-actions"><span id="guesses-left"></span><button id="party-guess" class="guess-button" disabled>Guess ↗</button></div></form>
             <ol id="party-attempts" class="attempts"></ol>

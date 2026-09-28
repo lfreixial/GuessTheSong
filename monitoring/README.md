@@ -38,8 +38,10 @@ The provisioned **Needle Drop · App monitoring** dashboard is also the Grafana 
 
 | Measurement | Meaning |
 | --- | --- |
-| Connected players | Multiplayer seats seen in the last 20 seconds. Multiple tabs using the same seat count once. |
-| Player joins, all time | Successful new seats, including lobby hosts. Reconnecting the same seat does not add another join. These are not unique people and do not include solo play. |
+| Connected players | Combined active multiplayer seats (20-second timeout) and visible solo sessions (45-second timeout), with separate panels for each mode. |
+| Play sessions / joins, all time | Multiplayer seat joins plus anonymous solo session starts, not unique people. Both totals also have separate panels. |
+| Solo sessions | A visible solo page sends a heartbeat every 15 seconds after loading a song. Its random token stays in session storage across refreshes. A session expires after 30 minutes without heartbeats or a server restart. Hidden/closed tabs stop counting as active within 45 seconds. No names or fingerprints are collected. |
+| Multiplayer joins | Successful new seats including hosts. Reconnecting the same seat does not add another join. |
 | Lobbies created, all time | Successful lobby creations since monitoring was installed. |
 | Current lobbies | All unexpired rooms, including waiting and finished rooms. Inactive rooms expire after two hours. |
 | Running games | Rooms loading a track, counting down, playing, or revealing an answer. Waiting, finished, and load-error rooms are excluded. |
@@ -49,9 +51,9 @@ The provisioned **Needle Drop · App monitoring** dashboard is also the Grafana 
 
 Music streams directly from Deezer's CDN to players, so it does **not** consume your server's upload bandwidth and is not counted here. The traffic panels also exclude HTTP headers, TLS/TCP overhead, reverse-proxy compression, and the server's upstream Deezer API requests. For exact host/interface or per-container network totals, add your existing host/container exporter; this stack does not require privileged exporters.
 
-Additional panels cover game starts/completions, guesses, skips, track-load failures, HTTP errors, open requests, and monitoring write failures. HTTP 499 indicates an aborted client request. Empty error/alert panels mean no matching events have been recorded. Period traffic uses Prometheus `increase`, so it is sampled and extrapolated; allow at least two scrapes and expect approximate values around restarts.
+Additional panels cover game starts/completions, guesses, longer-clip skips, songs passed, track-load failures, HTTP errors, open requests, and monitoring write failures. HTTP 499 indicates an aborted client request. Empty error/alert panels mean no matching events have been recorded. Period traffic uses Prometheus `increase`, so it is sampled and extrapolated; allow at least two scrapes and expect approximate values around restarts.
 
-Totals start at installation, with no retroactive historical data. Multiplayer event counters persist to `/data/monitoring/totals.json`, with asynchronous atomic saves every second and a flush on graceful shutdown. An abrupt power loss can lose the latest unsaved second or more if the disk is stalled. A malformed totals file stops startup rather than silently resetting your history; restore it from backup. Run one writer/game instance per data volume, as required by the app's in-memory lobbies.
+Totals start at installation, with no retroactive historical data. Solo totals begin when this update is installed. Existing multiplayer totals are migrated automatically. The combined count is not deduplicated across modes, tabs or devices; it measures play sessions rather than unique people. Multiplayer event counters persist to `/data/monitoring/totals.json`, with asynchronous atomic saves every second and a flush on graceful shutdown. An abrupt power loss can lose the latest unsaved second or more if the disk is stalled. A malformed totals file stops startup rather than silently resetting your history; restore it from backup. Run one writer/game instance per data volume, as required by the app's in-memory lobbies.
 
 ## Logs, retention and resources
 
@@ -82,7 +84,8 @@ Prometheus evaluates rules for app unavailability, frequent server errors, monit
 3. Create a lobby and join from a second browser. Connected players should increase by two, current lobbies by one, and persistent totals accordingly.
 4. Start a game. Running games should become one; completion should move that lobby to the finished phase.
 5. Find `lobby_created`, `player_joined`, `game_started` and `http_request` events in the logs panel.
-6. Check the traffic rate while opening the app; music download bandwidth is intentionally absent.
+6. Open the solo page in another browser. Solo players should increase after the song loads. Refresh the page: the same session must not add another total. Hide/close the tab and wait 45 seconds for active presence to expire.
+7. Check the traffic rate while opening the app; music download bandwidth is intentionally absent.
 
 For native development, set `METRICS_PORT=9464` to enable the private listener (localhost by default), and optionally `NEEDLE_DROP_LOG_DIR` to collect JSON files. Without `METRICS_PORT`, no metrics listener is started. JSON stdout logs and persisted multiplayer totals still work.
 

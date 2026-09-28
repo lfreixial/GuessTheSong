@@ -69,7 +69,7 @@ export function createLobbyService({ music, now = Date.now, onEvent = () => {} }
   }
   function everyoneDone(room) {
     const entries = active(room).map(p => room.round?.results.get(p.id)).filter(Boolean);
-    return entries.length >= 1 && entries.every(result => result.correct || result.guesses.length >= room.settings.maxGuesses);
+    return entries.length >= 1 && entries.every(result => result.correct || result.passed || result.guesses.length >= room.settings.maxGuesses);
   }
   async function loadNext(room) {
     if (room.phase === 'loading') return;
@@ -82,7 +82,7 @@ export function createLobbyService({ music, now = Date.now, onEvent = () => {} }
       if (room.generation !== generation || !rooms.has(room.code)) return;
       const startsAt = now() + COUNTDOWN_MS;
       room.round = { id: randomBytes(12).toString('hex'), number: (room.round?.number || 0) + 1, song, preview,
-        startsAt, endsAt: startsAt + ROUND_MS, results: new Map([...room.players.keys()].map(id => [id, { guesses: [], correct: false, points: 0, unlockedStep: 0, skips: 0 }])) };
+        startsAt, endsAt: startsAt + ROUND_MS, results: new Map([...room.players.keys()].map(id => [id, { guesses: [], correct: false, passed: false, points: 0, unlockedStep: 0, skips: 0 }])) };
       room.seen.push(song.id); room.phase = 'countdown';
       changed(room);
     } catch {
@@ -116,7 +116,7 @@ export function createLobbyService({ music, now = Date.now, onEvent = () => {} }
       room.roster = [...room.players.values()].map(player => {
         const result = r?.results.get(player.id);
         return { id: player.id, name: player.name, ready: player.ready, connected: now() - player.lastSeen < CONNECTED_MS,
-          score: player.score, correct: !!result?.correct, guesses: result?.guesses.length || 0, roundPoints: result?.points || 0 };
+          score: player.score, correct: !!result?.correct, passed: !!result?.passed, guesses: result?.guesses.length || 0, roundPoints: result?.points || 0 };
       }).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
       room.rosterVersion = room.version;
     }
@@ -125,7 +125,7 @@ export function createLobbyService({ music, now = Date.now, onEvent = () => {} }
       round: r ? { id: r.id, number: r.number, startsAt: r.startsAt, endsAt: r.endsAt,
         preview: ['countdown', 'playing', 'reveal'].includes(room.phase) ? r.preview : undefined,
         answer: reveal ? r.song : undefined,
-        guesses: mine?.guesses || [], correct: !!mine?.correct, points: mine?.points || 0,
+        guesses: mine?.guesses || [], correct: !!mine?.correct, passed: !!mine?.passed, points: mine?.points || 0,
         unlockedStep: mine?.unlockedStep || 0, skips: mine?.skips || 0 } : null };
   }
   function credentials(room, p) { return { token: p.token, state: snapshot(room, p) }; }
@@ -191,7 +191,7 @@ export function createLobbyService({ music, now = Date.now, onEvent = () => {} }
     if (input.type === 'guess') {
       requireThat(room.phase === 'playing' && input.roundId === room.round.id, 'That round is not accepting guesses.', 409);
       const r = room.round, result = r.results.get(p.id);
-      requireThat(result && !result.correct && result.guesses.length < room.settings.maxGuesses, 'You have finished this round.', 409);
+      requireThat(result && !result.correct && !result.passed && result.guesses.length < room.settings.maxGuesses, 'You have finished this round.', 409);
       requireThat(now() - p.lastGuess >= 1000, 'Wait one second between guesses.', 429);
       const song = room.choices.get(input.songId);
       requireThat(song, 'Search and select a song before guessing.');
@@ -202,11 +202,16 @@ export function createLobbyService({ music, now = Date.now, onEvent = () => {} }
       result.guesses.push({ id: song.id, title: song.title, artist: song.artist, correct: result.correct });
       if (result.correct) { result.points = pointsFor(now() - r.startsAt, result.skips); p.score += result.points; }
       changed(room);
+    } else if (input.type === 'skip-song') {
+      requireThat(room.phase === 'playing' && input.roundId === room.round.id, 'That round is not accepting skips.', 409);
+      const result = room.round.results.get(p.id);
+      requireThat(result && !result.correct && result.guesses.length < room.settings.maxGuesses, 'You have finished this round.', 409);
+      if (!result.passed) { result.passed = true; onEvent('song_passed'); changed(room); }
     } else if (input.type === 'hear-more') {
       requireThat(room.phase === 'playing' && input.roundId === room.round.id, 'That round is not accepting skips.', 409);
       requireThat(room.settings.clipMode === 'progressive', 'The full preview is already unlocked.', 409);
       const r = room.round, result = r.results.get(p.id);
-      requireThat(result && !result.correct && result.guesses.length < room.settings.maxGuesses, 'You have finished this round.', 409);
+      requireThat(result && !result.correct && !result.passed && result.guesses.length < room.settings.maxGuesses, 'You have finished this round.', 409);
       const currentStep = clipStepFor(now() - r.startsAt, result.unlockedStep);
       requireThat(Number.isInteger(input.step) && input.step >= 1 && input.step < CLIPS.length, 'Choose a valid clip step.');
       requireThat(input.step <= currentStep + 1, 'Unlock one clip at a time.', 409);

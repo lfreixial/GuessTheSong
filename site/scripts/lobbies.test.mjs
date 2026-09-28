@@ -23,6 +23,38 @@ function fixture(overrides = {}) {
   }
   return { service, host, guest, code, state, action, step, start, search, calls };
 }
+
+test('skip song gives up only that seat, cannot be undone, and the last finished player triggers reveal', async () => {
+  const f = fixture();
+  const state = await f.start({ endEarly: true });
+  const roundId = state.round.id;
+  const passed = f.action(f.guest, 'skip-song', { roundId });
+  assert.equal(passed.round.passed, true); assert.equal(passed.round.points, 0);
+  assert.equal(passed.phase, 'playing'); assert.equal(passed.round.answer, undefined);
+  assert.equal(f.state().round.passed, false);
+  assert.equal(f.state().players.find(p => p.id === f.guest.state.selfId).passed, true);
+  const repeated = f.action(f.guest, 'skip-song', { roundId });
+  assert.equal(repeated.version, passed.version);
+  assert.throws(() => f.action(f.guest, 'hear-more', { roundId, step: 1 }), { status: 409 });
+  await f.search();
+  assert.throws(() => f.action(f.guest, 'guess', { roundId, songId: 1 }), { status: 409 });
+  const revealed = f.action(f.host, 'guess', { roundId, songId: 1 });
+  assert.equal(revealed.phase, 'reveal'); assert.equal(revealed.round.answer.id, 1);
+  assert.equal(revealed.players.find(p => p.id === f.guest.state.selfId).score, 0);
+});
+
+test('skip song validates timing and round, respects the fixed timer option, and resets next track', async () => {
+  const f = fixture();
+  assert.throws(() => f.action(f.host, 'skip-song', { roundId: 'fake' }), { status: 409 });
+  let state = await f.start({ endEarly: false });
+  assert.throws(() => f.action(f.host, 'skip-song', { roundId: 'old' }), { status: 409 });
+  f.action(f.host, 'skip-song', { roundId: state.round.id });
+  state = f.action(f.guest, 'skip-song', { roundId: state.round.id });
+  assert.equal(state.phase, 'playing');
+  f.step(60000); assert.equal(f.state().phase, 'reveal');
+  f.step(8000); await flush(); f.step(5000);
+  assert.equal(f.state().round.passed, false);
+});
 test('codes, private credentials, case-insensitive joining and seat restoration', () => {
   const f = fixture();
   assert.match(f.code, /^[A-HJ-NP-Z2-9]{6}$/);

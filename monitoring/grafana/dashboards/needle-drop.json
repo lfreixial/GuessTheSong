@@ -1,12 +1,12 @@
 {
   "uid": "needle-drop",
-  "title": "Needle Drop · App monitoring",
+  "title": "Needle Drop \u00b7 App monitoring",
   "tags": [
     "needle-drop"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "time": {
     "from": "now-1h",
@@ -37,7 +37,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "**Players = multiplayer lobby seats.** Connected means seen in the last 20 seconds. Totals include hosts and repeat joins, exclude solo play, and persist in the app data volume. **Traffic = HTTP body bytes handled by the app**, excluding protocol overhead, upstream Deezer API traffic and music streamed directly to browsers. Rate/period panels use sampled counters; totals begin when monitoring is installed. Metrics: up to 15 days / 1 GB. Logs: 7 days. **Alert rules below do not send external notifications.**"
+        "content": "**Players = multiplayer seats + visible solo sessions, not unique people.** Activity expires after 20s (multiplayer) / 45s (solo). Solo refreshes reuse a session until 30 minutes idle or a server restart; one person using both modes can count twice. Totals persist; solo history starts with this update. **Traffic = app HTTP body bytes**, excluding Deezer audio and network overhead. Metrics: up to 15 days / 1 GB. Logs: 7 days. Alerts have no external notifications."
       }
     },
     {
@@ -90,7 +90,7 @@
       "id": 3,
       "title": "Connected players",
       "type": "stat",
-      "description": "Multiplayer seats active in the last 20 seconds.",
+      "description": "Combined active multiplayer seats and solo sessions. Not deduplicated across tabs, modes or devices.",
       "gridPos": {
         "x": 4,
         "y": 3,
@@ -134,9 +134,9 @@
     },
     {
       "id": 4,
-      "title": "Player joins — all time",
+      "title": "Play sessions / joins \u2014 all time",
       "type": "stat",
-      "description": "Persisted seat joins including hosts, not unique people. Starts at monitoring installation.",
+      "description": "Persisted multiplayer joins plus solo session starts; not unique people. Solo history begins with this update.",
       "gridPos": {
         "x": 8,
         "y": 3,
@@ -168,7 +168,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(needle_events_total{event=\"player_joined\"})",
+          "expr": "sum(needle_events_total{event=~\"player_joined|solo_session_started\"})",
           "datasource": {
             "type": "prometheus",
             "uid": "needle-prometheus"
@@ -272,7 +272,7 @@
     },
     {
       "id": 7,
-      "title": "Lobbies created — all time",
+      "title": "Lobbies created \u2014 all time",
       "type": "stat",
       "description": "Persisted successful lobby creations since monitoring installation.",
       "gridPos": {
@@ -318,12 +318,12 @@
     },
     {
       "id": 8,
-      "title": "App download to players — selected period",
+      "title": "App download to players \u2014 selected period",
       "type": "stat",
       "description": "",
       "gridPos": {
         "x": 0,
-        "y": 7,
+        "y": 11,
         "w": 6,
         "h": 4
       },
@@ -364,12 +364,12 @@
     },
     {
       "id": 9,
-      "title": "App uploads from players — selected period",
+      "title": "App uploads from players \u2014 selected period",
       "type": "stat",
       "description": "",
       "gridPos": {
         "x": 6,
-        "y": 7,
+        "y": 11,
         "w": 6,
         "h": 4
       },
@@ -410,12 +410,12 @@
     },
     {
       "id": 10,
-      "title": "Games started — all time",
+      "title": "Games started \u2014 all time",
       "type": "stat",
       "description": "",
       "gridPos": {
         "x": 12,
-        "y": 7,
+        "y": 11,
         "w": 6,
         "h": 4
       },
@@ -456,12 +456,12 @@
     },
     {
       "id": 11,
-      "title": "Games finished — all time",
+      "title": "Games finished \u2014 all time",
       "type": "stat",
       "description": "",
       "gridPos": {
         "x": 18,
-        "y": 7,
+        "y": 11,
         "w": 6,
         "h": 4
       },
@@ -507,7 +507,7 @@
       "description": "",
       "gridPos": {
         "x": 0,
-        "y": 11,
+        "y": 15,
         "w": 12,
         "h": 8
       },
@@ -559,7 +559,7 @@
       "description": "",
       "gridPos": {
         "x": 12,
-        "y": 11,
+        "y": 15,
         "w": 12,
         "h": 8
       },
@@ -590,17 +590,25 @@
             "type": "prometheus",
             "uid": "needle-prometheus"
           },
-          "legendFormat": "Connected",
-          "instant": false
+          "legendFormat": "Combined"
         },
         {
           "refId": "B",
-          "expr": "sum(needle_player_seats)",
+          "expr": "sum(needle_multiplayer_players_connected)",
           "datasource": {
             "type": "prometheus",
             "uid": "needle-prometheus"
           },
-          "legendFormat": "Seats including disconnected"
+          "legendFormat": "Multiplayer"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(needle_solo_players_connected)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "legendFormat": "Solo"
         }
       ]
     },
@@ -611,7 +619,7 @@
       "description": "",
       "gridPos": {
         "x": 0,
-        "y": 19,
+        "y": 23,
         "w": 12,
         "h": 8
       },
@@ -649,12 +657,12 @@
     },
     {
       "id": 15,
-      "title": "New joins / lobbies / games per minute",
+      "title": "New sessions / joins / lobbies / games per minute",
       "type": "timeseries",
       "description": "",
       "gridPos": {
         "x": 12,
-        "y": 19,
+        "y": 23,
         "w": 12,
         "h": 8
       },
@@ -680,7 +688,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (event) (rate(needle_events_total{event=~\"player_joined|lobby_created|game_started\"}[$__rate_interval])) * 60",
+          "expr": "sum by (event) (rate(needle_events_total{event=~\"player_joined|solo_session_started|lobby_created|game_started\"}[$__rate_interval])) * 60",
           "datasource": {
             "type": "prometheus",
             "uid": "needle-prometheus"
@@ -697,7 +705,7 @@
       "description": "",
       "gridPos": {
         "x": 0,
-        "y": 27,
+        "y": 31,
         "w": 12,
         "h": 8
       },
@@ -740,7 +748,7 @@
       "description": "",
       "gridPos": {
         "x": 12,
-        "y": 27,
+        "y": 31,
         "w": 12,
         "h": 8
       },
@@ -778,12 +786,12 @@
     },
     {
       "id": 18,
-      "title": "95th percentile response time — excludes lobby waits",
+      "title": "95th percentile response time \u2014 excludes lobby waits",
       "type": "timeseries",
       "description": "",
       "gridPos": {
         "x": 0,
-        "y": 35,
+        "y": 39,
         "w": 12,
         "h": 8
       },
@@ -826,7 +834,7 @@
       "description": "",
       "gridPos": {
         "x": 12,
-        "y": 35,
+        "y": 39,
         "w": 12,
         "h": 8
       },
@@ -864,12 +872,12 @@
     },
     {
       "id": 20,
-      "title": "App CPU — cores used",
+      "title": "App CPU \u2014 cores used",
       "type": "timeseries",
       "description": "",
       "gridPos": {
         "x": 0,
-        "y": 43,
+        "y": 47,
         "w": 12,
         "h": 8
       },
@@ -912,7 +920,7 @@
       "description": "",
       "gridPos": {
         "x": 12,
-        "y": 43,
+        "y": 47,
         "w": 12,
         "h": 8
       },
@@ -961,10 +969,10 @@
       "id": 22,
       "title": "Track load failures / minute",
       "type": "timeseries",
-      "description": "",
+      "description": "Multiplayer gameplay events.",
       "gridPos": {
         "x": 0,
-        "y": 51,
+        "y": 55,
         "w": 12,
         "h": 8
       },
@@ -1004,10 +1012,10 @@
       "id": 23,
       "title": "Answers and skips / minute",
       "type": "timeseries",
-      "description": "",
+      "description": "Multiplayer gameplay events.",
       "gridPos": {
         "x": 12,
-        "y": 51,
+        "y": 55,
         "w": 12,
         "h": 8
       },
@@ -1033,7 +1041,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (event) (rate(needle_events_total{event=~\"guess_correct|guess_incorrect|hear_more\"}[$__rate_interval])) * 60",
+          "expr": "sum by (event) (rate(needle_events_total{event=~\"guess_correct|guess_incorrect|hear_more|song_passed\"}[$__rate_interval])) * 60",
           "datasource": {
             "type": "prometheus",
             "uid": "needle-prometheus"
@@ -1045,12 +1053,12 @@
     },
     {
       "id": 24,
-      "title": "Monitoring write errors and dropped logs — since restart",
+      "title": "Monitoring write errors and dropped logs \u2014 since restart",
       "type": "timeseries",
       "description": "",
       "gridPos": {
         "x": 0,
-        "y": 59,
+        "y": 63,
         "w": 12,
         "h": 8
       },
@@ -1093,7 +1101,7 @@
       "description": "No rows means no active rules. Outbound notifications are not configured.",
       "gridPos": {
         "x": 12,
-        "y": 59,
+        "y": 63,
         "w": 12,
         "h": 8
       },
@@ -1129,7 +1137,7 @@
       "description": "",
       "gridPos": {
         "x": 0,
-        "y": 67,
+        "y": 71,
         "w": 24,
         "h": 12
       },
@@ -1161,6 +1169,186 @@
             "type": "loki",
             "uid": "needle-loki"
           }
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "title": "Solo players now",
+      "type": "stat",
+      "description": "Visible solo sessions heard from within 45 seconds.",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_solo_players_connected)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "title": "Multiplayer players now",
+      "type": "stat",
+      "description": "Lobby seats heard from within 20 seconds.",
+      "gridPos": {
+        "x": 6,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_multiplayer_players_connected)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "title": "Solo sessions \u2014 all time",
+      "type": "stat",
+      "description": "Anonymous session starts, not unique people. Refreshes reuse a session for up to 30 minutes of inactivity; a server restart starts new sessions.",
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_events_total{event=\"solo_session_started\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "title": "Multiplayer joins \u2014 all time",
+      "type": "stat",
+      "description": "Successful new lobby seats, including hosts. Reconnecting the same seat does not count twice.",
+      "gridPos": {
+        "x": 18,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "needle-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(needle_events_total{event=\"player_joined\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "needle-prometheus"
+          },
+          "instant": true
         }
       ]
     }

@@ -7,12 +7,12 @@ let seat = null, state = null, offset = 0, connected = false, busy = false, dirt
 let pollTimer, searchTimer, searchVersion = 0, chosen = null, matches = [], selected = -1;
 let audioRound = null, autoPlayed = false, settingsKey = '', clipTimer, lastPhase = '';
 let polling = false;
-let pollFailures = 0, pollAbort;
+let pollFailures = 0, pollAbort, resyncRequested = false;
 const audio = new Audio(); audio.preload = 'auto'; audio.volume = .8;
 const serverNow = () => Date.now() + offset;
 const isHost = () => state?.hostId === state?.selfId;
 const canGuess = () => connected && state?.phase === 'playing' && serverNow() >= state.round.startsAt && serverNow() < state.round.endsAt
-  && !state.round.correct && state.round.guesses.length < state.settings.maxGuesses;
+  && !state.round.correct && !state.round.passed && state.round.guesses.length < state.settings.maxGuesses;
 const clipStep = () => clipStepFor(serverNow() - state.round.startsAt, state.round.unlockedStep);
 const clipSeconds = () => state?.settings.clipMode === 'full' ? 30 : CLIPS[clipStep()];
 function message(text = '', error = false) { $('party-status').textContent = text; $('party-status').classList.toggle('error', error); }
@@ -39,32 +39,44 @@ function closeSearch() {
   $('party-guess').disabled = true;
 }
 function abandonSeat() {
-  pollAbort?.abort(); pollFailures = 0;
+  pollAbort?.abort(); pollFailures = 0; resyncRequested = false;
   clearTimeout(pollTimer); seat = null; state = null; connected = false; audioRound = null; lastPhase = ''; settingsKey = ''; dirty = false;
   stopAudio(); audio.removeAttribute('src'); audio.load(); closeSearch();
   try { sessionStorage.removeItem(STORE); } catch { /* Nothing to restore. */ }
   $('lobby').hidden = true; $('entry').hidden = false; $('connection').textContent = '';
 }
-async function poll() {
-  if (polling) return;
+async function poll(force = false) {
+  if (polling) {
+    if (force) { resyncRequested = true; pollAbort?.abort(); }
+    return;
+  }
   clearTimeout(pollTimer);
   const current = seat;
   if (!current) return;
   polling = true;
+  const waitForChanges = !force && state && state.phase !== 'waiting';
   const abort = new AbortController(); pollAbort = abort;
   const timeout = setTimeout(() => abort.abort(), 25000);
   try {
-    const result = await request(`/${current.code}${state ? `?after=${state.version}` : ''}`, undefined, true, abort.signal);
+    const result = await request(`/${current.code}${waitForChanges ? `?after=${state.version}` : ''}`, undefined, true, abort.signal);
     if (seat !== current) return;
     connected = true; pollFailures = 0; applyState(result);
   } catch (error) {
     if (seat !== current) return;
+    if (resyncRequested) return;
     connected = false;
     pollFailures++;
     if ([401, 404].includes(error.status)) { abandonSeat(); message(error.message, true); return; }
     $('connection').textContent = 'Reconnecting…'; refreshClock();
-  } finally { clearTimeout(timeout); if (pollAbort === abort) pollAbort = null; polling = false; if (seat && seat !== current) pollTimer = setTimeout(poll, 0); }
-  if (seat === current) pollTimer = setTimeout(poll, connected ? 0 : Math.min(15000, 1000 * 2 ** Math.min(pollFailures - 1, 4)));
+  } finally {
+    clearTimeout(timeout); if (pollAbort === abort) pollAbort = null; polling = false;
+    if (seat && (seat !== current || resyncRequested)) {
+      resyncRequested = false; pollTimer = setTimeout(() => poll(true), 0);
+    } else if (seat === current) {
+      // Short snapshots in the waiting room avoid stalled proxy long polls holding up Ready.
+      pollTimer = setTimeout(() => poll(!connected), connected ? (state?.phase === 'waiting' ? 1000 : 0) : Math.min(15000, 1000 * 2 ** Math.min(pollFailures - 1, 4)));
+    }
+  }
 }
 async function enter(joining) {
   if (busy) return;
@@ -91,7 +103,8 @@ async function action(type, extra = {}) {
     if (result.left) { abandonSeat(); history.replaceState(null, '', location.pathname); message('You left the lobby.'); return; }
     connected = true;
     if (type === 'settings') { dirty = false; settingsKey = ''; }
-    if (type === 'guess') { $('party-search').value = ''; closeSearch(); }
+    if (type === 'guess' || type === 'skip-song') { $('party-search').value = ''; closeSearch(); }
+    if (type === 'skip-song') stopAudio();
     applyState(result); message(type === 'settings' ? 'Settings saved. Everyone can ready up.' : '');
     if (type === 'hear-more' && state.round?.id === extra.roundId && canGuess()) {
       stopAudio(); void playClip();
@@ -104,7 +117,7 @@ async function action(type, extra = {}) {
 }
 function applyState(next) {
   $('connection').textContent = '● Connected';
-  if (state && next.version <= state.version) return;
+  if (state && next.version <= state.version) { refreshClock(); return; }
   const previousRound = state?.round?.id;
   state = next;
   $('entry').hidden = true; $('lobby').hidden = false; $('connection').textContent = '● Connected';
@@ -150,7 +163,7 @@ function renderPlayers() {
     const info = document.createElement('div'); info.className = 'player-info';
     const name = document.createElement('strong'); name.className = 'player-name'; name.textContent = `${player.name}${player.id === state.selfId ? ' (you)' : ''}`;
     const detail = document.createElement('span'); detail.className = 'player-detail';
-    const status = !player.connected ? 'Reconnecting…' : state.phase === 'waiting' ? (player.ready ? 'Ready ✓' : 'Not ready') : player.correct ? 'Got it ✓' : player.guesses >= state.settings.maxGuesses ? 'Out of guesses' : ['reveal', 'finished'].includes(state.phase) ? 'No answer' : 'Listening';
+    const status = !player.connected ? 'Reconnecting…' : state.phase === 'waiting' ? (player.ready ? 'Ready ✓' : 'Not ready') : player.correct ? 'Got it ✓' : player.passed ? 'Skipped song' : player.guesses >= state.settings.maxGuesses ? 'Out of guesses' : ['reveal', 'finished'].includes(state.phase) ? 'No answer' : 'Listening';
     detail.textContent = `${player.id === state.hostId ? 'Host · ' : ''}${status}`; info.append(name, detail);
     const score = document.createElement('strong'); score.className = 'player-score'; score.textContent = player.score.toLocaleString();
     if (player.roundPoints > 0) { const gain = document.createElement('small'); gain.className = 'round-points'; gain.textContent = `+${player.roundPoints}`; score.append(gain); }
@@ -166,15 +179,16 @@ function renderRound() {
   const r = state.round, phase = state.phase;
   const trackNumber = ['loading', 'load-error'].includes(phase) ? (r?.number || 0) + 1 : r?.number || 1;
   $('round-label').textContent = `TRACK ${trackNumber} / ${state.settings.tracks} · ${DIFFICULTIES[state.settings.difficulty].label.toUpperCase()}`;
-  const titles = { loading: 'Finding your next track…', 'load-error': 'The record needs a retry.', countdown: 'Get ready to listen.', playing: r?.correct ? 'That’s the one!' : 'Name that song.', reveal: 'The track revealed.', finished: 'That’s a wrap.' };
+  const titles = { loading: 'Finding your next track…', 'load-error': 'The record needs a retry.', countdown: 'Get ready to listen.', playing: r?.correct ? 'That’s the one!' : r?.passed ? 'Sitting this one out.' : 'Name that song.', reveal: 'The track revealed.', finished: 'That’s a wrap.' };
   $('round-title').textContent = titles[phase] || '';
   $('round-note').textContent = phase === 'load-error' ? state.error : phase === 'finished' ? winnerText()
     : r?.correct && phase === 'playing' ? `+${r.points} points. Wait for the rest of the crew.`
+    : r?.passed && phase === 'playing' ? 'Song skipped for zero points. The others can keep guessing.'
     : phase === 'playing' && r.guesses.length >= state.settings.maxGuesses ? 'No guesses left. Listen along until the reveal.'
     : phase === 'playing' ? 'The sooner you guess, the more points you earn.'
     : phase === 'reveal' ? 'Compare your scores. The next step starts automatically.'
     : phase === 'countdown' ? 'Everyone’s timer starts together. Press play if your browser blocks autoplay.' : 'Everyone will get the same song.';
-  $('party-guess-form').hidden = !['countdown', 'playing'].includes(phase) || !!r?.correct;
+  $('party-guess-form').hidden = !['countdown', 'playing'].includes(phase) || !!r?.correct || !!r?.passed;
   $('guesses-left').textContent = `${state.settings.maxGuesses - (r?.guesses.length || 0)} guesses left`;
   $('party-attempts').replaceChildren();
   for (const guess of r?.guesses || []) {
@@ -213,20 +227,23 @@ function refreshClock() {
   $('party-play').disabled = !connected || !r?.preview || !['playing', 'reveal'].includes(state.phase) || (state.phase === 'playing' && time >= r.endsAt);
   const expanding = state.settings.clipMode === 'progressive';
   const nextStep = r ? clipStep() + 1 : 0;
-  $('hear-more').hidden = !expanding || !['countdown', 'playing'].includes(state.phase);
+  $('hear-more').hidden = !expanding || !['countdown', 'playing'].includes(state.phase) || !!r?.correct || !!r?.passed;
   $('hear-more').disabled = busy || !canGuess() || nextStep >= CLIPS.length;
   $('hear-more').textContent = nextStep < CLIPS.length ? `Hear more → ${CLIPS[nextStep]}s (−20% points)` : 'Full clip unlocked';
+  $('party-skip-song').hidden = state.phase !== 'playing' || !!r?.correct || !!r?.passed;
+  $('party-skip-song').disabled = busy || !canGuess();
   $('potential-points').hidden = !canGuess();
   if (canGuess()) $('potential-points').textContent = `Worth about ${pointsFor(time - r.startsAt, r.skips).toLocaleString()} points now${r.skips ? ` · ${r.skips} paid ${r.skips === 1 ? 'skip' : 'skips'}` : ''}`;
   $('ready-button').disabled = busy || !connected;
   const active = state.players.filter(p => p.connected);
   $('start-game').disabled = busy || dirty || !connected || active.length < 2 || !active.every(p => p.ready);
+  $('start-note').textContent = !isHost() ? 'The host starts the game once everyone is ready.' : !connected ? 'Reconnecting to the lobby…' : dirty ? 'Save your settings before starting; everyone will need to ready up again.' : active.length < 2 ? 'Invite at least one more player.' : !active.every(p => p.ready) ? 'Waiting for everyone to ready up.' : 'Everyone is ready. Start the game when you’re ready.';
   for (const id of ['save-settings', 'next-round', 'retry-round', 'rematch']) $(id).disabled = busy || !connected;
   if (r && ['countdown', 'playing', 'reveal'].includes(state.phase)) {
     $('audio-label').textContent = state.phase === 'countdown' ? 'Get your ears ready.' : audio.paused ? 'Play the clip' : 'Listening…';
     $('audio-note').textContent = `${clipSeconds()}s unlocked · Replay anytime`;
   }
-  if (state.phase === 'playing' && time < r.endsAt && !autoPlayed && connected) { autoPlayed = true; void playClip(); }
+  if (state.phase === 'playing' && time < r.endsAt && !r.passed && !autoPlayed && connected) { autoPlayed = true; void playClip(); }
   if (state.phase === 'playing' && time >= r.endsAt) stopAudio();
 }
 async function playClip() {
@@ -250,6 +267,7 @@ $('party-play').onclick = playClip;
 $('hear-more').onclick = () => {
   if (!$('hear-more').disabled) return action('hear-more', { roundId: state.round.id, step: clipStep() + 1 });
 };
+$('party-skip-song').onclick = () => { if (!$('party-skip-song').disabled) return action('skip-song', { roundId: state.round.id }); };
 $('party-volume').oninput = e => { audio.volume = Number(e.target.value); };
 function showMatches(songs, empty = 'No matches. Try another title or artist.') {
   matches = songs.slice(0, 12); selected = -1; $('party-suggestions').replaceChildren();
@@ -306,7 +324,7 @@ $('settings-form').onsubmit = e => {
 async function copy(value) { try { await navigator.clipboard.writeText(value); message('Copied. Send it to your crew.'); } catch { message(`Copy this: ${value}`); } }
 $('copy-code').onclick = () => copy(state.code);
 $('copy-link').onclick = () => copy(`${location.origin}${location.pathname}?code=${state.code}`);
-document.addEventListener('visibilitychange', () => { if (document.hidden) stopAudio(); else if (seat) void poll(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopAudio(); else if (seat) void poll(true); });
 const invite = new URLSearchParams(location.search).get('code')?.toUpperCase();
 if (invite && /^[A-Z0-9]{6}$/.test(invite)) $('join-code').value = invite;
 try { $('player-name').value = localStorage.getItem('needle-drop:player-name') || ''; } catch { /* Optional convenience. */ }

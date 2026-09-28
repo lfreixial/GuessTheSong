@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { createMonitoring, requestRoute } from './monitoring.mjs';
 import { createLobbyService } from './lobbies.mjs';
+import { createSoloService } from './solo.mjs';
 
 async function fixture(t, options = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'needle-monitoring-'));
@@ -102,4 +103,34 @@ test('arbitrary URLs cannot grow route labels or expose queries', () => {
   assert.equal(requestRoute('/api/lobbies/ABCDEF/search?q=secret'), '/api/lobbies/:code/search');
   assert.equal(requestRoute('/api/search?q=secret'), '/api/search');
   assert.equal(requestRoute('/random-file.js'), 'static');
+});
+
+test('combined player metrics include solo sessions without revealing identifiers', async t => {
+  const { m } = await fixture(t);
+  const solo = createSoloService({ onEvent: m.event });
+  const session = solo.heartbeat(); solo.heartbeat(session.token);
+  m.setSnapshot(() => ({ connectedPlayers: 2, soloPlayers: solo.stats().connectedPlayers, seats: 2, phases: {}, running: 0, lobbies: 1 }));
+  const metrics = m.render();
+  assert.match(metrics, /needle_players_connected 3\n/);
+  assert.match(metrics, /needle_multiplayer_players_connected 2\n/);
+  assert.match(metrics, /needle_solo_players_connected 1\n/);
+  assert.match(metrics, /needle_events_total\{event="solo_session_started"\} 1\n/);
+  assert.ok(!metrics.includes(session.token));
+});
+
+test('old persisted totals upgrade without losing multiplayer history or blocking startup', async t => {
+  const { m, dir } = await fixture(t);
+  m.event('player_joined'); await m.close();
+  const path = join(dir, 'totals', 'totals.json');
+  const saved = JSON.parse(await readFile(path, 'utf8'));
+  saved.version = 1; delete saved.totals.solo_session_started; delete saved.totals.song_passed;
+  await writeFile(path, JSON.stringify(saved));
+  const updated = await createMonitoring({ dataDir: join(dir, 'totals'), stdout: null });
+  try {
+    assert.match(updated.render(), /needle_events_total\{event="player_joined"\} 1\n/);
+    assert.match(updated.render(), /needle_events_total\{event="solo_session_started"\} 0\n/);
+    updated.event('solo_session_started'); await updated.flush();
+    const stored = JSON.parse(await readFile(path, 'utf8'));
+    assert.equal(stored.version, 2); assert.equal(stored.totals.player_joined, 1); assert.equal(stored.totals.solo_session_started, 1);
+  } finally { await updated.close(); }
 });

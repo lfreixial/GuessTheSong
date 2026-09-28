@@ -21,7 +21,7 @@ export function clientAddress(req, trustedProxies = new Set()) {
   return address;
 }
 
-function readJSON(req) {
+export function readJSON(req) {
   if (!req.headers['content-type']?.startsWith('application/json')) throw new LobbyError('Send JSON for this request.', 415);
   return new Promise((resolve, reject) => {
     const chunks = []; let size = 0;
@@ -45,7 +45,7 @@ export function createLobbyRouter(lobbies, { waitMs = 15000, trustedProxies = ne
   const limits = new Map();
   return async function route(req, res, url) {
     if (!url.pathname.startsWith('/api/lobbies')) return false;
-    const json = (status, data) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(data));
+    const json = (status, data) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store, max-age=0', 'Vary': 'X-Player-Token', 'X-Accel-Buffering': 'no' }).end(JSON.stringify(data));
     try {
       if (req.method === 'POST' && req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) throw new LobbyError('Use this site to change a lobby.', 403);
       const match = url.pathname.match(/^\/api\/lobbies(?:\/([A-Za-z0-9]{6})(?:\/(join|action|search))?)?$/);

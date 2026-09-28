@@ -1,5 +1,7 @@
-import { CLIPS, utcDay, normalize, sameSong, newRound, hasWon, isFinished, clipLength, makeGuess, restoreRound } from './game.js';
+import { CLIPS, utcDay, normalize, sameSong, newRound, hasWon, isFinished, clipLength, makeGuess, passSong, restoreRound } from './game.js';
 import { DIFFICULTIES, isDifficulty } from './difficulties.js';
+import { createSoloPresence } from './presence.js';
+const soloPresence = createSoloPresence();
 const $ = id => document.getElementById(id);
 let catalog = [], mode = 'daily', round, daily, endless, chosen = null, matches = [], activeOption = -1, seen = [], clockOffset = 0, loadVersion = 0, ready = false;
 const audio = new Audio();
@@ -153,6 +155,12 @@ function submit(id) {
 }
 $('guess-form').addEventListener('submit', e => { e.preventDefault(); if (chosen) submit(chosen.id); else status('Choose a song from the search results first.'); });
 $('skip').addEventListener('click', () => submit(null));
+function skipSong() {
+  if (!round || roundLoading || (mode === 'daily' && daily.date !== utcDay(now())) || !passSong(round)) return;
+  stopAudio(); chosen = null; $('song-search').value = ''; closeSuggestions();
+  render(); save(); status('Song skipped. Here’s the answer — you can move on whenever you’re ready.');
+}
+$('skip-song').addEventListener('click', skipSong);
 function render() {
   const finished = isFinished(round), song = track(), count = round.attempts.length;
   $('daily-mode').classList.toggle('active', mode === 'daily'); $('endless-mode').classList.toggle('active', mode === 'endless');
@@ -170,9 +178,10 @@ function render() {
   $('player-subtitle').textContent = finished ? (hasWon(round) ? `Found in ${count} ${count === 1 ? 'guess' : 'guesses'}. Keep that good feeling.` : 'There’s always another song to fall in love with.') : 'Press play and see what rings a bell.';
   $('clip-length').textContent = `${clipLength(round)}s`; $('clip-description').textContent = count ? `${clipLength(round)} seconds of your mystery track` : 'Start with a one-second clip';
   $('song-search').disabled = finished; $('guess').disabled = true; $('skip').disabled = finished;
+  $('skip-song').disabled = finished; $('skip-song').hidden = finished;
   $('guess-form').hidden = finished; $('attempt-count').textContent = `${count} / 6`;
   $('attempt-label').textContent = `${6 - count} ${count === 5 ? 'guess' : 'guesses'} to find your song`;
-  $('skip').innerHTML = count < 5 ? `Skip <span>+${CLIPS[count + 1] - CLIPS[count]}s →</span>` : 'Reveal song';
+  $('skip').innerHTML = count < 5 ? `Hear more <span>+${CLIPS[count + 1] - CLIPS[count]}s →</span>` : 'Reveal song';
   $('attempts').replaceChildren();
   for (let i = 0; i < 6; i++) {
     const attempt = round.attempts[i], item = document.createElement('li'); item.className = 'attempt';
@@ -199,13 +208,13 @@ function render() {
   $('bottom-caption').textContent = mode === 'daily' ? 'A new track, every day. Resets at 00:00 UTC.' : `${DIFFICULTIES[endlessDifficulty].label} · ${DIFFICULTIES[endlessDifficulty].summary}. Recent tracks excluded.`;
   document.querySelector('.game-panel').setAttribute('aria-busy', 'false'); renderProgress(); updateClock();
 }
-function loadRound() { stopAudio(); audio.removeAttribute('src'); audio.load(); ready = false; chosen = null; $('song-search').value = ''; closeSuggestions(); $('retry-music').hidden = true; status(); render(); loadPreview(); }
+function loadRound() { stopAudio(); audio.removeAttribute('src'); audio.load(); ready = false; chosen = null; $('song-search').value = ''; closeSuggestions(); $('retry-music').hidden = true; status(); render(); loadPreview(); soloPresence.start(); }
 async function nextEndless(genre = $('genre').value, difficulty = $('difficulty').value) {
   const version = ++roundRequest;
   roundLoading = true; loadVersion++; closeSuggestions(); chosen = null;
   stopAudio(); status(`Finding your ${DIFFICULTIES[difficulty].label} track…`); $('retry-music').hidden = true;
   document.querySelector('.game-panel').setAttribute('aria-busy', 'true');
-  for (const id of ['play', 'song-search', 'guess', 'skip']) $(id).disabled = true;
+  for (const id of ['play', 'song-search', 'guess', 'skip', 'skip-song']) $(id).disabled = true;
   try {
     const { song } = await api(`random?genre=${encodeURIComponent(genre)}&difficulty=${encodeURIComponent(difficulty)}&exclude=${seen.slice(-500).join(',')}`);
     if (version !== roundRequest) return;

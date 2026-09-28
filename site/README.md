@@ -105,3 +105,11 @@ For deployment, run **one Node server** with a persistent disk at `NEEDLE_DROP_D
 `GET /api/daily`, `/api/random?genre=Rock&difficulty=hard&exclude=123,456`, `/api/search?q=artist`, and `/api/track/123` are implemented in `scripts/serve.mjs`, using `scripts/music.mjs`. Difficulty accepts `easy` (default), `medium`, `hard`, `expert`, or `impossible`; invalid genre or difficulty values return 400. Requests have timeouts and a bounded cache. The interface is in `dist/`; game rules are in `dist/game.js` and level definitions in `dist/difficulties.js`. Tests cover daily persistence/concurrency, UTC rollover, failure recovery, chart limits, popularity bands, catalogue expansion, live search, guessing, and level-switching state and retries.
 
 Solo answers are inspectable in the client; multiplayer withholds answer metadata until reveal and validates scores on the server. The app does not include competitive anti-cheat or accounts. Confirm music-provider permissions for a public or commercial release.
+
+### Ready updates, passing songs, and solo presence
+
+Waiting rooms fetch a fresh snapshot every second, while active games keep efficient long polling. Returning to the tab cancels a stalled poll and requests fresh state; the Start control explains whether it is waiting for players, saved settings, or a connection. Keep `/api/` uncached at the reverse proxy and run one app instance because lobbies are in memory.
+
+Use **Skip song** to give up immediately. Solo reveals the answer and offers the next track (daily skips persist as a loss). Multiplayer passes only your seat for zero points and prevents further guesses on that track. With early finish enabled, the last player finishing triggers the reveal; otherwise the host’s fixed timer remains in effect. **Hear more** still unlocks a longer clip.
+
+Solo pages send anonymous presence heartbeats every 15 seconds while visible. Grafana shows solo, multiplayer and combined active counts and session/join totals. Solo activity expires after 45 seconds without a heartbeat; a token is reused across refreshes until 30 minutes of inactivity or a server restart. Counts are sessions, not unique people. Existing monitoring totals are automatically upgraded.

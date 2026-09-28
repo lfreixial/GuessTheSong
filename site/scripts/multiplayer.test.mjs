@@ -25,7 +25,7 @@ function harness() {
     return { ok: status >= 200 && status < 300, status, json: async () => body };
   }
   async function client(name, stored = new Map()) {
-    const elements = new Map(), timers = new Map(); let timerId = 0;
+    const elements = new Map(), timers = new Map(), requests = []; let timerId = 0;
     function element() {
       return { value: '', hidden: false, disabled: false, checked: false, textContent: '', style: {}, attrs: {}, children: [],
         classList: { toggle() {} }, addEventListener() {}, focus() {}, scrollIntoView() {},
@@ -42,11 +42,16 @@ function harness() {
       location: { origin: 'http://localhost:4173', pathname: '/multiplayer.html', search: '' }, history: { replaceState() {} },
       navigator: { clipboard: { writeText: async () => {} } },
       setInterval() {}, setTimeout(fn, delay) { timers.set(++timerId, { fn, delay }); return timerId; }, clearTimeout(id) { timers.delete(id); },
-      fetch: fetchAPI,
+      fetch: (...args) => { requests.push(args[0]); return fetchAPI(...args); },
     });
     const run = code => vm.runInContext(code, context);
     run(source); await flush();
-    return { get, run, stored, async poll() { await run('poll()'); await flush(); },
+    return { get, run, stored, requests, async poll() { await run('poll()'); await flush(); },
+      async scheduledPoll() {
+        const entry = [...timers].find(([, timer]) => [0, 1000].includes(timer.delay));
+        assert.ok(entry, 'a follow-up poll is scheduled');
+        timers.delete(entry[0]); await entry[1].fn(); await flush();
+      },
       async search() { get('party-search').value = 'One'; get('party-search').oninput(); const [id, task] = [...timers].find(([, t]) => t.delay === 350); timers.delete(id); await task.fn(); },
     };
   }
@@ -83,6 +88,50 @@ test('two page controllers create, join, ready, play, guess, show standings and 
   assert.equal(host.get('rematch').hidden, false); assert.equal(guest.get('rematch').hidden, true);
   await host.run('action("reset")'); await guest.poll();
   assert.equal(guest.get('waiting-room').hidden, false); assert.equal(host.run('state.players[0].score'), 0);
+});
+
+test('waiting room learns ready changes through its scheduled snapshots without refreshing the page', async () => {
+  const h = harness(), host = await h.client('Host'), guest = await h.client('Guest');
+  await host.run('enter(false)'); await flush();
+  guest.get('join-code').value = host.run('state.code'); await guest.run('enter(true)'); await flush();
+  await host.scheduledPoll();
+  assert.equal(host.get('start-game').disabled, true);
+  await guest.run('action("ready", { ready: true })');
+  await host.scheduledPoll();
+  assert.equal(host.get('start-game').disabled, false);
+  assert.ok(!host.requests.at(-1).includes('after='));
+  assert.match(host.get('start-note').textContent, /Everyone is ready/);
+  await host.get('start-game').onclick(); await flush();
+  await host.scheduledPoll();
+  assert.equal(host.run('state.phase'), 'countdown');
+});
+
+test('foreground resync cancels a stalled request and schedules a fresh snapshot', async () => {
+  const h = harness(), host = await h.client('Host');
+  await host.run('enter(false)'); await flush();
+  host.run(`const realFetch = fetch; fetch = (_url, options) => new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('Aborted'))));`);
+  const stalled = host.run('poll()'); await flush();
+  await host.run('poll(true)'); await stalled;
+  host.run('fetch = realFetch');
+  await host.scheduledPoll();
+  assert.equal(host.run('connected'), true);
+  assert.ok(!host.requests.at(-1).includes('after='));
+});
+
+test('multiplayer skip song hides guessing and shows the answer once everyone finishes', async () => {
+  const h = harness(), host = await h.client('Host'), guest = await h.client('Guest');
+  await host.run('enter(false)'); await flush();
+  guest.get('join-code').value = host.run('state.code'); await guest.run('enter(true)'); await flush();
+  await guest.run('action("ready", { ready: true })'); await host.run('action("start")'); await flush();
+  h.step(5000); await host.poll(); await guest.poll();
+  assert.equal(guest.get('party-skip-song').disabled, false);
+  await guest.get('party-skip-song').onclick();
+  assert.equal(guest.run('state.round.passed'), true);
+  assert.equal(guest.get('party-guess-form').hidden, true); assert.equal(guest.get('party-skip-song').hidden, true);
+  assert.equal(guest.get('answer-reveal').hidden, true);
+  await host.get('party-skip-song').onclick(); await guest.poll();
+  assert.equal(guest.run('state.phase'), 'reveal'); assert.equal(guest.get('answer-reveal').hidden, false);
+  assert.equal(host.run('state.players.every(p => p.score === 0)'), true);
 });
 
 test('refresh restores a seat and older responses cannot roll the UI back', async () => {

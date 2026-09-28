@@ -3,13 +3,14 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 
-const EVENTS = ['lobby_created', 'player_joined', 'game_started', 'game_finished', 'round_finished', 'track_load_failed', 'hear_more', 'guess_correct', 'guess_incorrect'];
+const LEGACY_EVENTS = ['lobby_created', 'player_joined', 'game_started', 'game_finished', 'round_finished', 'track_load_failed', 'hear_more', 'guess_correct', 'guess_incorrect'];
+const EVENTS = [...LEGACY_EVENTS, 'song_passed', 'solo_session_started'];
 const BUCKETS = [0.005, 0.025, 0.1, 0.5, 1, 5, 20, Infinity];
 const METHODS = new Set(['GET', 'POST', 'HEAD', 'OPTIONS', 'PUT', 'PATCH', 'DELETE']);
 export function requestRoute(raw) {
   try {
     const url = new URL(raw, 'http://localhost'), path = url.pathname;
-    if (['/healthz', '/api/daily', '/api/random', '/api/search'].includes(path)) return path;
+    if (['/healthz', '/api/daily', '/api/random', '/api/search', '/api/solo/presence'].includes(path)) return path;
     if (/^\/api\/track\/\d+$/.test(path)) return '/api/track/:id';
     if (path === '/api/lobbies') return path;
     const match = path.match(/^\/api\/lobbies\/[A-Za-z0-9]{6}(?:\/(join|action|search))?$/);
@@ -29,8 +30,10 @@ export async function createMonitoring({ dataDir, logDir, stdout = process.stdou
     await mkdir(dataDir, { recursive: true });
     try {
       const saved = JSON.parse(await readFile(join(dataDir, 'totals.json'), 'utf8'));
-      if (saved.version !== 1 || EVENTS.some(key => !Number.isSafeInteger(saved.totals?.[key]) || saved.totals[key] < 0)) throw new Error('Invalid monitoring totals');
-      Object.assign(totals, saved.totals);
+      const required = saved.version === 1 ? LEGACY_EVENTS : EVENTS;
+      if (![1, 2].includes(saved.version) || required.some(key => !Number.isSafeInteger(saved.totals?.[key]) || saved.totals[key] < 0)
+        || EVENTS.some(key => saved.totals?.[key] !== undefined && (!Number.isSafeInteger(saved.totals[key]) || saved.totals[key] < 0))) throw new Error('Invalid monitoring totals');
+      for (const key of EVENTS) if (saved.totals[key] !== undefined) totals[key] = saved.totals[key];
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
   let queue = [], queuedBytes = 0, file, fileBytes = 0, flushJob;
@@ -67,7 +70,7 @@ export async function createMonitoring({ dataDir, logDir, stdout = process.stdou
       if (dirty && dataDir) {
         dirty = false;
         try {
-          await writeFile(join(dataDir, 'totals.json.tmp'), JSON.stringify({ version: 1, totals }));
+          await writeFile(join(dataDir, 'totals.json.tmp'), JSON.stringify({ version: 2, totals }));
           await rename(join(dataDir, 'totals.json.tmp'), join(dataDir, 'totals.json'));
         } catch { persistenceErrors++; dirty = true; }
       }
@@ -115,10 +118,12 @@ export async function createMonitoring({ dataDir, logDir, stdout = process.stdou
   let snapshot = () => ({ connectedPlayers: 0, seats: 0, phases: {}, running: 0, lobbies: 0 });
   function render() {
     const lines = [], gauge = (name, help, value) => { lines.push(`# HELP ${name} ${help}`, `# TYPE ${name} gauge`, `${name} ${value}`); };
-    lines.push('# HELP needle_events_total Persisted multiplayer events; player_joined counts seats including hosts, not unique people.', '# TYPE needle_events_total counter');
+    lines.push('# HELP needle_events_total Persisted play events; player_joined counts multiplayer seats and solo_session_started counts anonymous solo sessions, not unique people.', '# TYPE needle_events_total counter');
     for (const name of EVENTS) lines.push(`needle_events_total{event="${name}"} ${totals[name]}`);
     const state = snapshot();
-    gauge('needle_players_connected', 'Multiplayer seats active within the last 20 seconds; excludes solo players.', state.connectedPlayers);
+    gauge('needle_players_connected', 'Connected multiplayer seats plus active solo sessions; not deduplicated across modes.', state.connectedPlayers + (state.soloPlayers || 0));
+    gauge('needle_multiplayer_players_connected', 'Multiplayer seats active within the last 20 seconds.', state.connectedPlayers);
+    gauge('needle_solo_players_connected', 'Visible solo sessions with a heartbeat in the last 45 seconds.', state.soloPlayers || 0);
     gauge('needle_player_seats', 'Multiplayer seats including disconnected players.', state.seats);
     gauge('needle_lobbies_current', 'All unexpired lobbies including waiting and finished.', state.lobbies);
     gauge('needle_lobbies_running', 'Games loading, counting down, playing or revealing; excludes waiting, finished and load-error.', state.running);

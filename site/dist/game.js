@@ -7,12 +7,17 @@ export function sameSong(a, b) {
 }
 export function newRound(track, date) { return { trackId: track.id, date, attempts: [] }; }
 export const hasWon = round => round.attempts.some(a => a.id === round.trackId);
-export const isFinished = round => hasWon(round) || round.attempts.length >= CLIPS.length;
-export const clipLength = round => CLIPS[Math.min(round.attempts.length, CLIPS.length - 1)];
+export const isFinished = round => round.passed === true || hasWon(round) || round.attempts.length >= CLIPS.length;
+export const clipLength = round => CLIPS[round.passed ? CLIPS.length - 1 : Math.min(round.attempts.length, CLIPS.length - 1)];
 export function makeGuess(round, id) {
   if (isFinished(round)) return false;
   if (id !== null && round.attempts.some(a => a.id === id)) return false;
   round.attempts.push({ id });
+  return true;
+}
+export function passSong(round) {
+  if (isFinished(round)) return false;
+  round.passed = true;
   return true;
 }
 export function restoreRound(value, track, date, catalog) {
@@ -21,5 +26,6 @@ export function restoreRound(value, track, date, catalog) {
   for (const a of value.attempts) {
     if (!a || (a.id !== null && !catalog.some(s => s.id === a.id)) || !makeGuess(restored, a.id)) return newRound(track, date);
   }
+  if (value.passed === true && !hasWon(restored)) restored.passed = true;
   return restored;
 }

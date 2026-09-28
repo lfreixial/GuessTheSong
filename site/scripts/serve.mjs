@@ -6,13 +6,16 @@ import { isDifficulty } from '../dist/difficulties.js';
 import { createLobbyService } from './lobbies.mjs';
 import { createLobbyRouter, trustedProxyIPs } from './lobby-api.mjs';
 import { createMonitoring } from './monitoring.mjs';
+import { createSoloService, createSoloRouter } from './solo.mjs';
 const root = resolve('dist');
 const dataDir = resolve(process.env.NEEDLE_DROP_DATA_DIR || '.data/daily');
 const monitoring = await createMonitoring({ dataDir: resolve(dirname(dataDir), 'monitoring'), logDir: process.env.NEEDLE_DROP_LOG_DIR });
 const music = createMusicService({ dataDir });
 const lobbies = createLobbyService({ music, onEvent: monitoring.event });
-monitoring.setSnapshot(lobbies.stats);
+const solo = createSoloService({ onEvent: monitoring.event });
+monitoring.setSnapshot(() => ({ ...lobbies.stats(), soloPlayers: solo.stats().connectedPlayers }));
 const lobbyRoute = createLobbyRouter(lobbies, { trustedProxies: trustedProxyIPs(process.env.TRUSTED_PROXY_IPS), log: monitoring.log });
+const soloRoute = createSoloRouter(solo, { trustedProxies: trustedProxyIPs(process.env.TRUSTED_PROXY_IPS) });
 const lobbyTimer = setInterval(() => lobbies.tick(), 250);
 lobbyTimer.unref();
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json' };
@@ -21,6 +24,7 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     if (await lobbyRoute(req, res, url)) return;
+    if (await soloRoute(req, res, url)) return;
     if (url.pathname === '/healthz') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end('{"status":"ok"}'); return; }
     if (url.pathname.startsWith('/api/')) {
       const json = (code, body) => res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(body));
