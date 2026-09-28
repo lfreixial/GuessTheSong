@@ -1,0 +1,19 @@
+# Host-specific: expose services to Nginx Proxy Manager on the shared koboh network.
+services:
+  game:
+    networks:
+      default:
+      koboh:
+        aliases: [guessthesong]
+
+  # NPM routes grafana.kobohcloud.com -> grafana:3000
+  grafana:
+    environment:
+      GF_SERVER_ROOT_URL: https://grafana.kobohcloud.com/
+    networks:
+      default:
+      koboh:
+
+networks:
+  koboh:
+    external: true
